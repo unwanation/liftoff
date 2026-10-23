@@ -1,0 +1,123 @@
+# A tag `modules/<crate>/vX.Y.Z` builds that module for wasm32-wasip2,
+# signs it with the registry's minisign key and publishes it with the new
+# `index.json` as the release `<crate>-vX.Y.Z` of
+# `<owner>/liftoff-modules` on GitHub (modules/registry/release.sh).
+# docs/MODULES.md lists the secrets.
+name: Modules
+
+on:
+  push:
+    tags: ["modules/*/v*.*.*"]
+
+permissions: {}
+
+# One module release at a time across all tags: each one builds on the
+# index of the latest release. Never cancel a publish half-way.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: module release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # the registry is written with its own token
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install # from rust-toolchain.toml, with wasm32-wasip2
+      # No tool cache on release builds: published artefacts must not depend
+      # on cache contents (zizmor: cache-poisoning).
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+        with:
+          cache: false
+      - name: tag
+        id: tag
+        run: |
+          set -euo pipefail
+          re='^modules/([a-z0-9-]+)/v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$'
+          [[ $TAG =~ $re ]] || { echo "::error::$TAG is no modules/<crate>/vX.Y.Z"; exit 1; }
+          crate=${BASH_REMATCH[1]}
+          version=${BASH_REMATCH[2]}
+          [[ -f modules/$crate/Cargo.toml ]] || { echo "::error::modules/$crate is no module"; exit 1; }
+          meta=$(cargo metadata --format-version 1 --no-deps --locked --manifest-path modules/Cargo.toml |
+            jq -ec --arg path "$PWD/modules/$crate/Cargo.toml" \
+              '.packages[] | select(.manifest_path == $path and .metadata.liftoff != null)
+                | {package: .name, lib: (.targets[] | select(.kind | index("cdylib")) | .name)}') ||
+            { echo "::error::modules/$crate has no [package.metadata.liftoff]"; exit 1; }
+          {
+            echo "crate=$crate"
+            echo "version=$version"
+            echo "package=$(jq -r .package <<<"$meta")"
+            echo "lib=$(jq -r .lib <<<"$meta")"
+            echo "release=$crate-v$version"
+          } >>"$GITHUB_OUTPUT"
+        env:
+          TAG: ${{ github.ref_name }}
+      - name: build
+        run: cargo build --manifest-path modules/Cargo.toml -p "${PACKAGE}" --target wasm32-wasip2 --release --locked
+        env:
+          PACKAGE: ${{ steps.tag.outputs.package }}
+      # The index of the registry's latest release; none yet starts an
+      # empty one. Any other failure stops the release: an index built
+      # without the previous one would drop every published module.
+      - name: previous index
+        run: |
+          set -euo pipefail
+          if latest=$(gh api "repos/${REGISTRY}/releases/latest" 2>gh-error.txt); then
+            jq -e '.assets[] | select(.name == "index.json")' <<<"$latest" >/dev/null ||
+              { echo "::error::the latest release of ${REGISTRY} has no index.json"; exit 1; }
+            gh release download "$(jq -r .tag_name <<<"$latest")" -R "${REGISTRY}" \
+              --pattern index.json --output previous-index.json
+            jq -e '.modules | type == "object"' previous-index.json >/dev/null
+          elif grep -q 'HTTP 404' gh-error.txt; then
+            echo "no release of ${REGISTRY} yet: a new index"
+          else
+            cat gh-error.txt >&2
+            exit 1
+          fi
+        env:
+          REGISTRY: ${{ github.repository_owner }}/liftoff-modules
+          GH_TOKEN: ${{ secrets.MODULES_REGISTRY_TOKEN }}
+      - name: sign and index
+        run: |
+          set -euo pipefail
+          : "${SIGNING_KEY:?secret MODULES_SIGNING_KEY is not set: liftoffd refuses an unsigned module}"
+          key="$(mktemp)"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$SIGNING_KEY" > "$key"
+          previous=()
+          [[ ! -f previous-index.json ]] || previous=(previous-index.json)
+          MINISIGN_SECRET_KEY="$key" EXPECT_VERSION="$VERSION" modules/registry/release.sh \
+            "modules/$CRATE" "modules/target/wasm32-wasip2/release/$LIB.wasm" \
+            "https://github.com/${REGISTRY}/releases/download/${RELEASE}" dist "${previous[@]}"
+        env:
+          CRATE: ${{ steps.tag.outputs.crate }}
+          LIB: ${{ steps.tag.outputs.lib }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          RELEASE: ${{ steps.tag.outputs.release }}
+          REGISTRY: ${{ github.repository_owner }}/liftoff-modules
+          SIGNING_KEY: ${{ secrets.MODULES_SIGNING_KEY }}
+      # A draft while its assets upload, published once every one is
+      # there: `releases/latest` never names a release without its
+      # index.json, and a run that dies midway leaves a draft the next
+      # run picks up.
+      - name: publish to the registry
+        run: |
+          set -euo pipefail
+          if gh release view "${RELEASE}" -R "${REGISTRY}" >/dev/null 2>&1; then
+            gh release edit "${RELEASE}" -R "${REGISTRY}" --draft=true
+          else
+            gh release create "${RELEASE}" -R "${REGISTRY}" --draft --title "${RELEASE}" --notes "liftoff module ${RELEASE}"
+          fi
+          gh release upload "${RELEASE}" -R "${REGISTRY}" dist/* --clobber
+          gh release edit "${RELEASE}" -R "${REGISTRY}" --draft=false
+        env:
+          RELEASE: ${{ steps.tag.outputs.release }}
+          REGISTRY: ${{ github.repository_owner }}/liftoff-modules
+          GH_TOKEN: ${{ secrets.MODULES_REGISTRY_TOKEN }}

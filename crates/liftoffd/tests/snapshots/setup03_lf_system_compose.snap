@@ -1,0 +1,21 @@
+---
+source: crates/liftoffd/tests/system_compose.rs
+---
+# The compose project of liftoff's own services, written by `liftoffd setup`.
+# Caddy is on the host network: every upstream is on the host's loopback.
+# What it listens on comes from the configuration liftoffd loads.
+name: lf_system
+services:
+  caddy:
+    image: caddy:2.10.2
+    command: ["caddy", "run", "--resume"]
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      CADDY_ADMIN: "127.0.0.1:2019"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+volumes:
+  caddy_data:
+  caddy_config:

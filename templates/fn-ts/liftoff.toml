@@ -1,0 +1,14 @@
+[template]
+group = "function"
+name = "fn-ts"
+description = "TypeScript HTTP function, componentize-js, Bun"
+
+[function]
+build = "bun install && bun run build"
+component = "dist/fn.wasm"
+
+[dev]
+command = "bun install && bun run build && wasmtime serve -Scli -Sconfig -Skeyvalue --addr 127.0.0.1:$PORT dist/fn.wasm"
+
+[substitute]
+files = ["README.md", "src/index.ts"]

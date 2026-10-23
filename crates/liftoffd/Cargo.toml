@@ -1,0 +1,113 @@
+[package]
+name = "liftoffd"
+description = "The liftoff daemon: configuration, telemetry, the deploy queue, the composition root and the REST listener."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+name = "liftoffd"
+path = "src/lib.rs"
+
+[[bin]]
+name = "liftoffd"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[package.metadata.cargo-machete]
+# Referenced as a string in `#[serde(with = "humantime_serde")]`.
+ignored = ["humantime-serde"]
+
+[dependencies]
+liftoff-core = { workspace = true }
+liftoff-host = { workspace = true }
+liftoff-proxy = { workspace = true }
+liftoff-rest = { workspace = true }
+liftoff-store = { workspace = true }
+# The tunnel server behind `GET /api/v1/tunnel` and the tunnel listener.
+liftoff-tunnel = { workspace = true }
+liftoff-wasm = { workspace = true }
+# The Streamable HTTP transport of `/mcp`,
+# mounted beside the REST router.
+liftoff-mcp = { workspace = true }
+axum = { workspace = true }
+
+# The function listener.
+bytes = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true, features = ["server", "http1"] }
+hyper-util = { workspace = true, features = ["http1", "server-graceful", "tokio"] }
+
+clap = { workspace = true, features = [
+  "std",
+  "derive",
+  "help",
+  "usage",
+  "error-context",
+  "suggestions",
+  "env",
+  "wrap_help",
+] }
+figment = { workspace = true, features = ["env", "toml"] }
+getrandom = { workspace = true }
+humantime-serde = { workspace = true }
+# `import-artifacts` reads the database of the standalone artifacts server, read-only.
+rusqlite = { workspace = true, features = ["bundled"] }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+time = { workspace = true, features = ["std"] }
+tokio = { workspace = true, features = [
+  "rt-multi-thread",
+  "macros",
+  "net",
+  "process",
+  "signal",
+  "sync",
+  "time",
+] }
+tokio-util = { workspace = true }
+tracing = { workspace = true, features = ["std"] }
+tracing-subscriber = { workspace = true, features = ["std", "fmt", "env-filter", "json", "ansi"] }
+ulid = { workspace = true }
+
+[dev-dependencies]
+# tests/oidc.rs: the fake OIDC provider signs its ID tokens with an RSA key
+# generated per run.
+aws-lc-rs = { workspace = true, features = ["alloc", "aws-lc-sys", "ring-io"] }
+# tests/hooks.rs drives the REST router over the module host in memory;
+# tests/oidc.rs serves the fake OIDC provider with it.
+axum = { workspace = true, features = ["http1", "json", "tokio"] }
+base64 = { workspace = true, features = ["alloc"] }
+figment = { workspace = true, features = ["test"] }
+# tests/tunnel.rs: the browser's WebSocket and the developer's WebSocket
+# app of TUN-08 through the tunnel listener.
+futures-util = { workspace = true, features = ["sink"] }
+# tests/function_listener.rs talks to the listener as Caddy does;
+# tests/tunnel.rs also serves the developer's local app with it.
+hyper = { workspace = true, features = ["client", "http1", "server"] }
+insta = { workspace = true }
+# tests/dns_cloudflare.rs checks `ip` against the module's config schema
+# as `module configure` does.
+jsonschema = { workspace = true }
+# tests/oidc.rs reads the module's answers as the wire types the CLI reads.
+liftoff-api = { workspace = true }
+liftoff-core = { workspace = true, features = ["test-support"] }
+# tests/oidc.rs loads the built `oidc` component with the host contract's
+# helpers (`liftoff_wasm::testing`).
+liftoff-wasm = { workspace = true, features = ["test-support"] }
+serde_json = { workspace = true, features = ["std"] }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["time", "net", "test-util"] }
+tokio-tungstenite = { workspace = true, features = ["handshake"] }
+tower = { workspace = true, features = ["util"] }
+# tests/mcp_http.rs: the stdio server still answers once `mcp` is
+# removed (MCPH-06), driven by an rmcp client over in-memory pipes.
+rmcp = { workspace = true, features = ["client", "transport-async-rw"] }

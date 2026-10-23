@@ -1,0 +1,24 @@
+// The world of a liftoff function, version 0.1.0.
+//
+// Nothing of liftoff's own: the standard `wasi:http/proxy` world plus
+// `wasi:config/store` (the environment's resolved secrets) and
+// `wasi:keyvalue` (`store`, `atomics`, `batch`; the environment's `kv`
+// table), so a component built for another host of these worlds runs
+// unchanged. The daemon's function runtime (`crates/wasm`) links exactly these imports plus the rest of WASI 0.2 without
+// preopened directories or sockets; the contract functions of
+// `modules/testing/functions/` are built against this directory.
+//
+// `deps/config/` and `deps/keyvalue/` are verbatim copies of `wit/deps/`
+// of the `wasmtime-wasi-config` and `wasmtime-wasi-keyvalue` crates of
+// the wasmtime the host links (49.0.4); the other files of `deps/` are
+// symlinks to the repository's `wit/deps/` (`scripts/wit-deps.sh`).
+package liftoff:function@0.1.0;
+
+world function {
+  include wasi:http/proxy@0.2.12;
+
+  import wasi:config/store@0.2.0-rc.1;
+  import wasi:keyvalue/store@0.2.0-draft;
+  import wasi:keyvalue/atomics@0.2.0-draft;
+  import wasi:keyvalue/batch@0.2.0-draft;
+}

@@ -1,0 +1,3 @@
+# The Axum fixture is a project to detect, not a crate: keep cargo-machete
+# (which honours .ignore) from running `cargo metadata` on it.
+axum/Cargo.toml

@@ -1,0 +1,17 @@
+/target
+/coverage
+/lcov.info
+*.profraw
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.log
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.mise.local.toml
+.lefthook-local.yml
+/modules/target

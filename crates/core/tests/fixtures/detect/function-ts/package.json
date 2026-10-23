@@ -1,0 +1,11 @@
+{
+  "name": "fn-ts",
+  "type": "module",
+  "scripts": {
+    "dev": "bunx @bytecodealliance/jco serve dist/fn.wasm"
+  },
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "^0.15.0",
+    "@bytecodealliance/jco": "^1.8.0"
+  }
+}

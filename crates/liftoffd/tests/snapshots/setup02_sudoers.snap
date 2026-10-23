@@ -1,0 +1,14 @@
+---
+source: crates/liftoffd/tests/setup.rs
+---
+# /etc/sudoers.d/liftoff, installed by `liftoffd setup`.
+#
+# liftoffd caps and stops the slices of its environments
+# (crates/host/src/systemd.rs) and nothing else:
+#   systemctl set-property --runtime apps-lf-*.slice CPUQuota=… MemoryMax=… MemorySwapMax=0
+#   systemctl stop apps-lf-*.slice
+# The rules are regular expressions, not wildcards: a sudoers `*` also
+# matches spaces, so `stop apps-lf-*.slice` would let
+# `stop apps-lf-x.slice ssh.service y.slice` through.
+liftoff ALL=(root) NOPASSWD: /usr/bin/systemctl ^set-property --runtime apps-lf-[^ ]+[.]slice CPUQuota=[0-9]+% MemoryMax=[0-9]+M MemorySwapMax=0$
+liftoff ALL=(root) NOPASSWD: /usr/bin/systemctl ^stop apps-lf-[^ ]+[.]slice$

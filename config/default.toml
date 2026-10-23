@@ -1,0 +1,82 @@
+# Every key here equals the compiled-in default; the file exists as documentation
+#. `liftoffd setup` writes the installation's own file to
+# /etc/liftoff/liftoffd.toml. Override with another file (`--config`) and/or env
+# vars: LIFTOFF_<SECTION>__<KEY>, e.g. LIFTOFF_API__BIND=127.0.0.1:7100.
+# Unknown keys are an error; secrets are never inline, only as files.
+
+[api]
+# Required: where the API and the daemon's pages are reached.
+# public_url = "https://liftoff.example.com"
+bind = "127.0.0.1:7000"
+request_timeout = "10s"
+long_request_timeout = "150s"
+max_body_bytes = 1048576
+
+[domains]
+# Required: the wildcard base of managed domains and the server's address.
+# base = "apps.example.com"
+# public_ip = "1.2.3.4"
+reserved = []
+port_range = [20000, 29999]
+
+[proxy]
+tls = "acme"
+# acme_email = "ops@example.com"   # required with tls = "acme"
+# edge_port = 7002                 # required with tls = "edge"
+admin = "127.0.0.1:2019"
+
+[store]
+path = "/var/lib/liftoff/liftoff.db"
+
+[paths]
+data = "/var/lib/liftoff"
+master_key = "/etc/liftoff/master.key"
+
+[docker]
+config_dir = "/var/lib/liftoff/docker"
+
+[deploy]
+parallel = 2
+wait_timeout = "120s"
+history = 20
+
+[functions]
+bind = "127.0.0.1:7003"
+max_memory_mb = 128
+timeout = "30s"
+instances_per_env = 4
+kv_max_mb = 64
+
+[tunnel]
+bind = "127.0.0.1:7004"
+max_streams = 64
+offline_after = "30s"
+# Both directions of a tunnel environment's connection together.
+bandwidth = { bytes_per_second = 10485760, burst = 1048576 }
+
+[gate]
+bind = "127.0.0.1:7001"
+
+[artifacts]
+ttl = "5h"
+max_size_mb = 16
+versions = 50
+# Empty: <api.public_url>/a/
+host = ""
+
+[templates]
+repos = ["github.com/unwanation/liftoff-fn-ts"]
+
+[modules]
+registry = "https://api.github.com/repos/unwanation/liftoff-modules/releases"
+# One call into a module (a tool, a route, a hook, a tick) is interrupted after this
+# (more than 0s, at most 1h).
+call_timeout = "10s"
+# The linear memory of one module, in MiB (1 to 4096); growing past it traps the call.
+max_memory_mb = 64
+
+[log]
+# tracing filter: "info", "debug", or targets like "info,liftoff_rest=debug"
+level = "info"
+# "json" (machines) or "pretty" (humans)
+format = "json"

@@ -1,0 +1,105 @@
+---
+source: crates/proxy/tests/json.rs
+---
+{
+  "apps": {
+    "http": {
+      "servers": {
+        "edge": {
+          "automatic_https": {
+            "disable": true
+          },
+          "listen": [
+            "127.0.0.1:7002"
+          ],
+          "routes": [
+            {
+              "handle": [
+                {
+                  "handler": "headers",
+                  "request": {
+                    "delete": [
+                      "X-Liftoff-*"
+                    ]
+                  }
+                },
+                {
+                  "handler": "static_response",
+                  "status_code": 404
+                }
+              ],
+              "match": [
+                {
+                  "host": [
+                    "liftoff.test"
+                  ],
+                  "path": [
+                    "/internal",
+                    "/internal/*"
+                  ]
+                }
+              ],
+              "terminal": true
+            },
+            {
+              "handle": [
+                {
+                  "handler": "headers",
+                  "request": {
+                    "delete": [
+                      "X-Liftoff-*"
+                    ]
+                  }
+                },
+                {
+                  "handler": "reverse_proxy",
+                  "upstreams": [
+                    {
+                      "dial": "127.0.0.1:7000"
+                    }
+                  ]
+                }
+              ],
+              "match": [
+                {
+                  "host": [
+                    "liftoff.test"
+                  ]
+                }
+              ],
+              "terminal": true
+            },
+            {
+              "handle": [
+                {
+                  "handler": "headers",
+                  "request": {
+                    "delete": [
+                      "X-Liftoff-*"
+                    ]
+                  }
+                },
+                {
+                  "handler": "reverse_proxy",
+                  "upstreams": [
+                    {
+                      "dial": "127.0.0.1:7004"
+                    }
+                  ]
+                }
+              ],
+              "match": [
+                {
+                  "host": [
+                    "api.apps.test"
+                  ]
+                }
+              ],
+              "terminal": true
+            }
+          ]
+        }
+      }
+    }
+  }
+}

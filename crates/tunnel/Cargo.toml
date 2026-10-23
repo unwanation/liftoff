@@ -1,0 +1,59 @@
+[package]
+name = "liftoff-tunnel"
+description = "The tunnel of lof dev: its protocol, the multiplexer and both sides of the connection."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bytes = { workspace = true }
+futures-util = { workspace = true, features = ["alloc", "sink"] }
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+# The server writes each request into its stream as HTTP/1.1 and reads
+# the answer back; a `101` splices the two upgraded connections.
+hyper = { workspace = true, features = ["client", "http1"] }
+hyper-util = { workspace = true, features = ["tokio"] }
+# `Hello`, `Shutdown` and `Evicted` travel as JSON text messages.
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "sync", "time"] }
+# yamux speaks `futures::io`; `compat` bridges it to tokio's.
+tokio-util = { workspace = true, features = ["compat"] }
+# The client connects TCP (and TLS for `wss://`) itself and upgrades over
+# it; the server takes the raw IO after the daemon's `101`.
+tokio-tungstenite = { workspace = true, features = ["handshake"] }
+# `wss://`: ring, as the rest of the workspace, against the Web PKI roots.
+rustls = { workspace = true, features = ["ring", "std", "tls12"] }
+tokio-rustls = { workspace = true, features = ["ring", "tls12"] }
+webpki-roots = { workspace = true }
+tracing = { workspace = true, features = ["std"] }
+yamux = { workspace = true }
+
+[dev-dependencies]
+# The daemon side behind a real WebSocket upgrade, the local app of the
+# developer and the browser in front of the listener (tests/tunnel.rs).
+axum = { workspace = true, features = ["http1", "tokio"] }
+hyper = { workspace = true, features = ["client", "http1", "server"] }
+hyper-util = { workspace = true, features = ["server", "tokio"] }
+tokio = { workspace = true, features = [
+  "io-util",
+  "macros",
+  "net",
+  "rt",
+  "rt-multi-thread",
+  "sync",
+  "test-util",
+  "time",
+] }
+# The browser's WebSocket and the local WebSocket app of TUN-08.
+tokio-tungstenite = { workspace = true, features = ["connect", "handshake"] }

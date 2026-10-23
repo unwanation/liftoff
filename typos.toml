@@ -1,0 +1,25 @@
+[files]
+extend-exclude = [
+  "Cargo.lock",
+  "target/",
+  "*.snap",
+  ".claude/",
+  ".agents/",
+  # Verbatim copy of the WASI WIT (scripts/wit-deps.sh checks it).
+  "wit/deps/",
+  # The same WIT, copied into the function templates.
+  "templates/*/wit/deps/",
+  # The WIT of the function world: symlinks to wit/deps/ and verbatim
+  # copies of wasi:config and wasi:keyvalue (wit/function/function.wit).
+  "wit/function/deps/",
+]
+
+[default]
+extend-ignore-re = [
+  # SHA pins in GitHub Actions `uses:` lines and image digests.
+  "@[0-9a-f]{40}",
+  "sha256:[0-9a-f]{64}",
+]
+
+[default.extend-words]
+# Add legitimate words typos flags, e.g. `ser = "ser"`.

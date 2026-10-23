@@ -1,0 +1,13 @@
+{
+  "name": "liftoff-function-ts",
+  "private": true,
+  "type": "module",
+  "description": "Contract function in TypeScript (FNC-01…06): the behaviour of modules/testing/functions/rust, built with componentize-js.",
+  "scripts": {
+    "build": "bun build src/index.ts --outfile build/index.js --target browser --format esm --external 'wasi:*' && mkdir -p dist && jco componentize build/index.js --wit ../../../../wit/function --world-name function --out dist/fn_ts.wasm"
+  },
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "0.23.0",
+    "@bytecodealliance/jco": "1.39.0"
+  }
+}

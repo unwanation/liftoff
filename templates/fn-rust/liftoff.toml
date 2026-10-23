@@ -1,0 +1,14 @@
+[template]
+group = "function"
+name = "fn-rust"
+description = "Rust HTTP function, wasm32-wasip2"
+
+[function]
+build = "cargo build --target wasm32-wasip2 --release --locked"
+component = "target/wasm32-wasip2/release/function.wasm"
+
+[dev]
+command = "cargo build --target wasm32-wasip2 --release --locked && wasmtime serve -Scli -Sconfig -Skeyvalue --addr 127.0.0.1:$PORT target/wasm32-wasip2/release/function.wasm"
+
+[substitute]
+files = ["README.md", "src/lib.rs"]

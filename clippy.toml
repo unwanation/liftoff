@@ -1,0 +1,38 @@
+# Thresholds and allow-lists for the lints enabled in Cargo.toml.
+msrv = "1.98"
+avoid-breaking-exported-api = false
+
+# Panicking and printing are fine inside `#[cfg(test)]`.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-print-in-tests = true
+allow-dbg-in-tests = true
+allow-indexing-slicing-in-tests = true
+allow-useless-vec-in-tests = true
+
+# Complexity budgets: keep functions small enough to review in one screen.
+cognitive-complexity-threshold = 15
+too-many-lines-threshold = 80
+too-many-arguments-threshold = 6
+type-complexity-threshold = 200
+large-error-threshold = 128
+enum-variant-size-threshold = 200
+stack-size-threshold = 262144
+array-size-threshold = 16384
+trivial-copy-size-limit = 16
+pass-by-value-size-limit = 256
+single-char-binding-names-threshold = 4
+
+# Compile-time bans. Each entry must say what to use instead.
+disallowed-methods = [
+  { path = "std::env::set_var", reason = "process-global mutation is racy; pass config explicitly" },
+  { path = "std::env::remove_var", reason = "process-global mutation is racy; pass config explicitly" },
+  { path = "std::process::exit", reason = "return an error from main so destructors and tracing flush run" },
+  { path = "std::thread::sleep", reason = "blocks the async runtime; use tokio::time::sleep" },
+  { path = "tokio::runtime::Handle::block_on", reason = "deadlocks inside the runtime; await instead" },
+]
+disallowed-macros = [
+  { path = "std::println", reason = "use tracing, or write to an explicit `impl Write` in the CLI" },
+  { path = "std::eprintln", reason = "use tracing, or write to an explicit `impl Write` in the CLI" },
+]

@@ -1,0 +1,111 @@
+[package]
+name = "liftoff"
+description = "Command-line client for the liftoff deploy service."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "liftoff"
+path = "src/main.rs"
+
+[features]
+# Test support of local mode: `Local::routing_https_to`
+# sends the modules' `wasi:http` to a fake forge on loopback through the
+# module host's own seam (`liftoff-wasm`'s `test-support`).
+test-support = ["liftoff-wasm/test-support"]
+
+[dependencies]
+clap = { workspace = true, features = [
+  "std",
+  "derive",
+  "help",
+  "usage",
+  "error-context",
+  "suggestions",
+  # Owned names: the commands of modules are built at run time.
+  "string",
+] }
+# The forge connection's token in the `Authorization` header of the
+# `git` children of local mode (never in their arguments).
+base64 = { workspace = true, features = ["alloc"] }
+comfy-table = { workspace = true }
+# The (empty) log stream of `local::Offline`, the `Docker` port of local
+# mode.
+futures-core = { workspace = true }
+inquire = { workspace = true, features = ["crossterm"] }
+liftoff-api = { workspace = true }
+# Local mode: the CLI runs the core
+# services over its own local adapters and the `git.*` modules in its own
+# wasm host. From this task the CLI may depend on `liftoff-core` and
+# `liftoff-wasm`, never on `liftoff-store`, `liftoff-host`,
+# `liftoff-proxy` or `liftoff-rest`.
+liftoff-core = { workspace = true }
+liftoff-wasm = { workspace = true }
+# The rules of module tables (`store-query`) the daemon's store holds
+# modules to, for the CLI's `modules.db`.
+liftoff-module-sql = { workspace = true }
+# The tunnel of `lof dev`: the
+# client side of `GET /tunnel`.
+liftoff-tunnel = { workspace = true }
+# `lof mcp`; it sits on `liftoff-api`, never on
+# `liftoff-core`.
+liftoff-mcp = { workspace = true }
+# `stream`: the upload of a function's component, whose progress the CLI
+# shows.
+reqwest = { workspace = true, features = ["rustls", "json", "query", "stream"] }
+# Local mode: `secrets.db` and `modules.db` in the config home; `bundled`
+# so the binary needs no system SQLite.
+rusqlite = { workspace = true, features = ["bundled"] }
+rusqlite_migration = { workspace = true }
+# `lof dev`: Ctrl-C ends the dev command's
+# process group.
+rustix = { workspace = true, features = ["std", "process"] }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+# The RFC 3339 times of local mode's answers, as the server's.
+time = { workspace = true, features = ["formatting", "std"] }
+# `process`: the dev command of `lof dev`, waited for beside Ctrl-C.
+tokio = { workspace = true, features = ["rt", "macros", "time", "signal", "process"] }
+tokio-util = { workspace = true }
+toml = { workspace = true, features = ["parse", "display"] }
+# The log of local mode on stderr (the CLI owns stdout): the core's and
+# the module host's `tracing` events, a module's `log` calls, and the
+# causes of internal errors, which never go into an answer. `LIFTOFF_LOG`
+# sets the filter, `warn` by default.
+tracing = { workspace = true, features = ["std"] }
+tracing-subscriber = { workspace = true, features = ["std", "fmt", "env-filter"] }
+
+[dev-dependencies]
+axum = { workspace = true, features = ["http1", "json", "tokio", "multipart"] }
+# The fake daemon's `GET /tunnel`: the upgrade
+# taken from axum's request and its `Sec-WebSocket-Accept`; the real
+# tunnel server of `liftoff-tunnel` runs behind it.
+hyper = { workspace = true, features = ["http1", "server"] }
+hyper-util = { workspace = true, features = ["tokio"] }
+tokio-tungstenite = { workspace = true, features = ["handshake"] }
+# The local-mode tests: the fake registry signs
+# its releases with the core's `FakeModuleSource`; the module host
+# contract of `liftoff-wasm` runs against the CLI's host (LCL-06).
+liftoff = { path = ".", features = ["test-support"] }
+liftoff-core = { workspace = true, features = ["test-support"] }
+liftoff-wasm = { workspace = true, features = ["test-support"] }
+rstest = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = [
+  "io-util",
+  "net",
+  "process",
+  "rt-multi-thread",
+] }

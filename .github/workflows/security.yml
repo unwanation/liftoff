@@ -1,0 +1,53 @@
+name: Security
+
+on:
+  schedule:
+    - cron: "17 6 * * *" # daily
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["Cargo.lock", "modules/Cargo.lock", "deny.toml", ".github/workflows/security.yml"]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  advisories:
+    name: advisories (rustsec)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write # audit-check opens issues for new advisories
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  deny:
+    name: cargo-deny (advisories, licenses, bans, sources)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@b66acf5e9fe20f8aba065be86778a8a4c846f902 # v2
+        with:
+          command: check
+          arguments: --workspace --all-features
+      # The modules' own lock file (modules/): advisories, licences, bans.
+      - uses: EmbarkStudios/cargo-deny-action@b66acf5e9fe20f8aba065be86778a8a4c846f902 # v2
+        with:
+          command: check
+          manifest-path: modules/Cargo.toml
+          arguments: --workspace --all-features --config deny.toml

@@ -1,0 +1,32 @@
+[package]
+name = "liftoff-module-tenants"
+description = "The tenants module of liftoff: tenants with owners and members, quotas, and the protect gate on environments."
+# 0.2.0: the `artifact.*` actions, after the released 0.1.0
+#; the registry never replaces a version.
+version = "0.2.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+# The oldest liftoffd the module runs on: `liftoffd_min` of its release in
+# the registry's index.json (modules/registry/release.sh, REG-02).
+[package.metadata.liftoff]
+liftoffd_min = "2.0.0-alpha.2"
+
+[lib]
+# `tenants.wasm` in `modules/target/wasm32-wasip2/release/`.
+name = "tenants"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+# Tenant ids are ULIDs: their randomness from `wasi:random`.
+getrandom = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wit-bindgen = { workspace = true }

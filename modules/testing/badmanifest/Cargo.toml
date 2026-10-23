@@ -1,0 +1,21 @@
+[package]
+name = "liftoff-module-badmanifest"
+description = "Contract component of the module host: a manifest with an unknown field (MOD-06)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+# `badmanifest.wasm` in `modules/target/wasm32-wasip2/release/`.
+name = "badmanifest"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+wit-bindgen = { workspace = true }

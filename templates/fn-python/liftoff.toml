@@ -1,0 +1,14 @@
+[template]
+group = "function"
+name = "fn-python"
+description = "Python HTTP function, componentize-py, uv"
+
+[function]
+build = "uv run componentize-py -d wit -w function componentize app -o dist/fn.wasm"
+component = "dist/fn.wasm"
+
+[dev]
+command = "uv run componentize-py -d wit -w function componentize app -o dist/fn.wasm && wasmtime serve -Scli -Sconfig -Skeyvalue --addr 127.0.0.1:$PORT dist/fn.wasm"
+
+[substitute]
+files = ["README.md", "app.py"]

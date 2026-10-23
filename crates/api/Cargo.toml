@@ -1,0 +1,22 @@
+[package]
+name = "liftoff-api"
+description = "Request and response types of the liftoff HTTP API, shared by the daemon and the CLI."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# The JSON Schemas of the MCP tools,
+# one derive beside `utoipa::ToSchema`.
+schemars = { workspace = true, features = ["derive", "std"] }
+serde = { workspace = true, features = ["derive", "std"] }
+# The configuration of modules and their JSON Schemas.
+serde_json = { workspace = true, features = ["std"] }
+utoipa = { workspace = true, features = ["macros"] }

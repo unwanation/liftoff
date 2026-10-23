@@ -1,0 +1,12 @@
+{
+  "name": "fn-ts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/index.ts --outfile build/index.js --target browser --format esm --external 'wasi:*' && mkdir -p dist && jco componentize build/index.js --wit wit --world-name function --out dist/fn.wasm"
+  },
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "0.23.0",
+    "@bytecodealliance/jco": "1.39.0"
+  }
+}

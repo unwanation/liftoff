@@ -1,0 +1,58 @@
+---
+source: crates/core/tests/snippet.rs
+---
+==> .forgejo/workflows/deploy.yml (compose)
+# Deploys to liftoff on every push. CI secrets from `lof secret sync`:
+# LIFTOFF_TOKEN, REGISTRY_USER, REGISTRY_TOKEN.
+# The runner needs a Docker daemon for docker buildx; for one without,
+# commit your own workflow (`lof create` keeps a template's).
+name: deploy
+on: [push]
+jobs:
+  deploy:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+      - name: image name
+        run: echo "IMAGE=git.example.com/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: git.example.com
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}:sha-${{ github.sha }}
+      - name: deploy
+        env:
+          LIFTOFF_TOKEN: ${{ secrets.LIFTOFF_TOKEN }}
+        run: |
+          curl -fsS https://liftoff.example.com/api/v1/deploys \
+            -H "Authorization: Bearer $LIFTOFF_TOKEN" \
+            -F "repo=$GITHUB_REPOSITORY" -F "ref=$GITHUB_REF_NAME" \
+            -F "tag=sha-$GITHUB_SHA" -F "compose=@deploy/compose.yaml"
+
+==> .forgejo/workflows/deploy.yml (function)
+# Deploys to liftoff on every push. CI secrets from `lof secret sync`:
+# LIFTOFF_TOKEN. The runner needs the toolchain of the build command.
+name: deploy
+on: [push]
+jobs:
+  deploy:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+      - name: build the component
+        run: |
+          bun install && bun run build
+      - name: deploy
+        env:
+          LIFTOFF_TOKEN: ${{ secrets.LIFTOFF_TOKEN }}
+        run: |
+          curl -fsS https://liftoff.example.com/api/v1/deploys \
+            -H "Authorization: Bearer $LIFTOFF_TOKEN" \
+            -F "repo=$GITHUB_REPOSITORY" -F "ref=$GITHUB_REF_NAME" \
+            -F "component=@dist/fn.wasm"

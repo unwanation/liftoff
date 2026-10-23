@@ -1,0 +1,11 @@
+# zizmor config (https://docs.zizmor.sh/configuration/).
+rules:
+  # `$/path` is GitHub-only; the Forgejo runner needs `./path` for the local
+  # composite action. Matched by basename, so the GitHub twins (which use no
+  # local actions) are covered harmlessly.
+  self-repository:
+    ignore:
+      - ci.yml
+      - release.yml
+      - security.yml
+      - modules.yml

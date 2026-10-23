@@ -1,0 +1,23 @@
+[package]
+name = "liftoff-module-probe"
+description = "Contract component of the module host: its own tables, the core's users, a tick."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+# `probe.wasm` in `modules/target/wasm32-wasip2/release/`.
+name = "probe"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+wit-bindgen = { workspace = true }

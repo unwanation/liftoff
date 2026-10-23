@@ -1,0 +1,21 @@
+[package]
+name = "liftoff-module-trap"
+description = "Contract component of the module host: calls that trap and grow memory."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+# `trap.wasm` in `modules/target/wasm32-wasip2/release/`.
+name = "trap"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+wit-bindgen = { workspace = true }

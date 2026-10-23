@@ -1,0 +1,58 @@
+// The world of a liftoff module, version 0.1.0.
+//
+// `wit/deps/` is a verbatim copy of `wit/deps/` of the `wasmtime-wasi-http`
+// crate the host links (49.0.3: WASI 0.2.12); `just wit-deps` refreshes it
+// from the locked crate and `just wit-deps-check` (part of `just ci`) fails
+// when it drifts. The host (`crates/wasm`, wasmtime `bindgen!`) and every
+// module (`modules/`, `wit-bindgen`) read this directory.
+package liftoff:module@0.1.0;
+
+interface host {
+  variant level { debug, info, warn, error }
+  record error { code: string, message: string }
+
+  /// The value of `key` in the module's own key space.
+  store-get: func(key: string) -> option<list<u8>>;
+  /// Sets `key` in the module's own key space.
+  store-set: func(key: string, value: list<u8>);
+  /// One SQL statement over the module's own tables (`m_<module>_*`) with
+  /// `params` bound to `?1`, `?2`, ...; its rows as a JSON array of
+  /// objects keyed by column name (a blob as a base64 string). Anything
+  /// outside its tables is an error with code `forbidden`, bad SQL or a
+  /// second statement one with code `validation`.
+  store-query: func(sql: string, params: list<string>) -> result<string, error>;
+  /// The module's configuration value `key`, secrets decrypted.
+  config-get: func(key: string) -> option<string>;
+  /// A call into a core service as the actor of the current call; JSON in
+  /// and out.
+  core-call: func(service: string, method: string, args: string) -> result<string, error>;
+  /// Calls `tick(name)` every `every-secs` seconds, one call at a time
+  /// (the next period starts when the tick returned); scheduling a name
+  /// again replaces its period, `every-secs = 0` stops it.
+  schedule: func(name: string, every-secs: u32);
+  /// A line in the daemon's log, tagged with the module.
+  log: func(level: level, msg: string);
+}
+
+interface module {
+  use host.{error};
+
+  record request { method: string, path: string, headers: list<tuple<string, string>>, body: list<u8>, actor: option<string> }
+  record response { status: u16, headers: list<tuple<string, string>>, body: list<u8> }
+  variant hook-result { allow, deny(string), %continue }
+
+  /// JSON: name, version, dependencies, config schema, allowed hosts,
+  /// CLI commands, routes, MCP tools, number of migrations, hooks.
+  manifest: func() -> string;
+  migrate: func(%from: u32) -> result<_, error>;
+  handle-route: func(req: request) -> response;
+  handle-tool: func(name: string, args: string) -> result<string, error>;
+  on-hook: func(hook: string, payload: string) -> result<hook-result, error>;
+  tick: func(name: string);
+}
+
+world liftoff-module {
+  import host;
+  import wasi:http/outgoing-handler@0.2.12;
+  export module;
+}

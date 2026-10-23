@@ -1,0 +1,59 @@
+name: ignored-by-liftoff
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: example
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready"]
+      interval: 5s
+    networks:
+      - backend
+    restart: always
+  web:
+    image: git.example.com/bob/app:${IMAGE_TAG}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgres://db/app
+    env_file: .env
+    expose:
+      - "3000"
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    labels:
+      team: acme
+    logging:
+      driver: syslog
+    restart: unless-stopped
+    command: ["serve"]
+    entrypoint: ["/app"]
+    user: "1000:1000"
+    working_dir: /srv
+    stop_grace_period: 30s
+    volumes:
+      - type: volume
+        source: uploads
+        target: /srv/uploads
+      - type: tmpfs
+        target: /cache
+    configs:
+      - app_conf
+    networks:
+      backend:
+        aliases: [app]
+volumes:
+  pgdata:
+  uploads: {}
+networks:
+  backend: {}
+configs:
+  app_conf:
+    content: |
+      key = value

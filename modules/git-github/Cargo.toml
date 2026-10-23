@@ -1,0 +1,32 @@
+[package]
+name = "liftoff-module-git-github"
+description = "The git.github module of liftoff: the core's Git port over the GitHub API as the user's own connection, OAuth device flow or token."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+# The oldest liftoffd the module runs on: `liftoffd_min` of its release in
+# the registry's index.json (modules/registry/release.sh, REG-02). The
+# device flow tools need the `Git` port of 2.0.0-alpha.3.
+[package.metadata.liftoff]
+liftoffd_min = "2.0.0-alpha.3"
+
+[lib]
+# `git_github.wasm` in `modules/target/wasm32-wasip2/release/`.
+name = "git_github"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+base64 = { workspace = true }
+crypto_box = { workspace = true, features = ["alloc", "rand_core", "salsa20", "seal"] }
+getrandom = { workspace = true }
+rand_core = { workspace = true }
+serde_json = { workspace = true }
+wit-bindgen = { workspace = true }

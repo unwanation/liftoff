@@ -1,0 +1,101 @@
+[package]
+name = "liftoff-wasm"
+description = "wasmtime host of liftoff modules: the liftoff:module world, its host imports and the scheduler."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# The module host contract (`liftoff_wasm::testing`): its checks over the
+# contract components of `modules/testing/`, the
+# `module_host_contract_tests!` macro and its fixtures, for every host
+# built on `ModuleHost` (the daemon's now, the CLI's).
+test-support = [
+  "dep:tempfile",
+  "liftoff-core/test-support",
+  "tokio/io-util",
+  "tokio/rt-multi-thread",
+]
+
+[dependencies]
+liftoff-core = { workspace = true }
+
+# The client of an allowed `wasi:http` request (`send.rs`), which
+# connects to the address `http.rs` checked (MOD-07).
+bytes = { workspace = true }
+futures-util = { workspace = true, features = ["alloc"] }
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true, features = ["client", "http1"] }
+rustls = { workspace = true, features = ["ring", "std", "tls12"] }
+tokio-rustls = { workspace = true, features = ["ring", "tls12"] }
+webpki-roots = { workspace = true }
+thiserror = { workspace = true }
+# `HttpModuleSource`: the module registry's `index.json` and components
+# over HTTPS, moved here from `liftoff-remote`; `serde` reads the releases API.
+reqwest = { workspace = true, features = ["rustls"] }
+serde = { workspace = true, features = ["derive", "std"] }
+# `net`: `wasi:http` resolves a host before it may connect (MOD-07).
+tokio = { workspace = true, features = ["macros", "net", "rt", "sync", "time"] }
+tracing = { workspace = true, features = ["std"] }
+# The JSON payloads of `on-hook` and of the `/.hook/` calls (`set.rs`);
+# test-support: the contract's JSON arguments.
+serde_json = { workspace = true, features = ["std"] }
+# `kv_set`'s time of a function's `wasi:keyvalue` write.
+time = { workspace = true, features = ["std"] }
+# test-support: the contract's cache directories.
+tempfile = { workspace = true, optional = true }
+# `cache`: wasmtime's compile cache in `paths.data/cache/` (MOD-12).
+wasmtime = { workspace = true, features = [
+  "async",
+  "cache",
+  "component-model",
+  "cranelift",
+  "runtime",
+  "std",
+] }
+# `functions`: a component's export and import names, read before it
+# compiles (FN-01).
+wasmparser = { workspace = true, features = ["component-model", "std"] }
+wasmtime-wasi = { workspace = true, features = ["p2"] }
+# Without `default-send-request`: its client resolves the host again when
+# it connects, so `send.rs` sends an allowed request instead (MOD-07).
+wasmtime-wasi-http = { workspace = true, features = ["p2"] }
+
+[dev-dependencies]
+# The fake OIDC provider of the `oidc` module's tests (tests/oidc.rs): an
+# HTTP server, its form bodies, and the RS256 ID tokens it signs; the fake
+# Forgejo API of the `git.forgejo` module's tests (tests/git_forgejo.rs)
+# answers JSON.
+aws-lc-rs = { workspace = true, features = ["alloc", "aws-lc-sys", "ring-io"] }
+axum = { workspace = true, features = ["form", "http1", "json", "tokio"] }
+base64 = { workspace = true, features = ["alloc"] }
+# The fake GitHub of tests/git_github.rs holds the repository's private
+# key and opens the sealed box of a CI secret (GIT-05).
+crypto_box = { workspace = true, features = ["alloc", "rand_core", "salsa20", "seal"] }
+liftoff-core = { workspace = true, features = ["test-support"] }
+liftoff-wasm = { path = ".", features = ["test-support"] }
+# The contract functions' one test set over the Rust, TS and Python
+# components (tests/contract_functions.rs: FNC-01…06).
+rstest = { workspace = true }
+# A 1024-bit RSA signature by hand (OIDC-06: the module refuses short keys).
+num-bigint = { workspace = true }
+# Function components written as WAT (tests/functions.rs: FN-01, FN-06).
+wat = { workspace = true, features = ["component-model"] }
+# The session times the `oidc` module's tests expect (OIDC-01, OIDC-07).
+time = { workspace = true }
+tokio = { workspace = true, features = [
+  "macros",
+  "rt",
+  "rt-multi-thread",
+  "sync",
+  "time",
+] }

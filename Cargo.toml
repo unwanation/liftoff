@@ -1,0 +1,340 @@
+[workspace]
+resolver = "3"
+members = [
+  "crates/api",
+  "crates/core",
+  "crates/host",
+  "crates/liftoff",
+  "crates/liftoffd",
+  "crates/mcp",
+  "crates/module-sql",
+  "crates/proxy",
+  "crates/rest",
+  "crates/store",
+  "crates/tunnel",
+  "crates/wasm",
+]
+# `modules/` is a workspace of its own: every crate in it targets
+# `wasm32-wasip2` (spec 3.5; `just modules`).
+exclude = ["modules"]
+
+[workspace.package]
+version = "2.0.3"
+edition = "2024"
+rust-version = "1.98"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/unwanation/liftoff"
+authors = ["unwanation <unwanation@gmail.com>"]
+publish = false
+
+[workspace.dependencies]
+# Internal crates
+liftoff = { path = "crates/liftoff" }
+liftoff-api = { path = "crates/api" }
+liftoff-core = { path = "crates/core" }
+liftoff-mcp = { path = "crates/mcp" }
+liftoff-module-sql = { path = "crates/module-sql" }
+liftoff-host = { path = "crates/host" }
+liftoff-proxy = { path = "crates/proxy" }
+liftoff-rest = { path = "crates/rest" }
+liftoff-store = { path = "crates/store" }
+liftoff-tunnel = { path = "crates/tunnel" }
+liftoff-wasm = { path = "crates/wasm" }
+
+# Async runtime
+tokio = { version = "1.53", default-features = false }
+tokio-util = { version = "0.7", default-features = false }
+
+# HTTP / REST
+axum = { version = "0.8", default-features = false }
+tower = { version = "0.5", default-features = false }
+tower-http = { version = "0.7", default-features = false }
+http = "1.5"
+http-body-util = "0.1"
+
+# Storage
+rusqlite = { version = "0.40", default-features = false }
+rusqlite_migration = { version = "2.6", default-features = false }
+
+# Network clients (Caddy admin API, module registry, public DNS) and crypto
+reqwest = { version = "0.13", default-features = false }
+hickory-resolver = { version = "0.26", default-features = false }
+chacha20poly1305 = { version = "0.11", default-features = false }
+base64 = { version = "0.23", default-features = false }
+# Test-only: the 1024-bit RSA signature the `oidc` module must refuse
+# (crates/wasm/tests/oidc.rs); aws-lc-rs signs with 2048 bits and more.
+num-bigint = { version = "0.4", default-features = false }
+# Test-only: the fake GitHub opens the libsodium sealed box `git.github`
+# seals a CI secret in (crates/wasm/tests/git_github.rs, GIT-05).
+crypto_box = { version = "0.9", default-features = false }
+
+# WASM modules (crates/wasm). The WIT of `wasi:http` in `wit/deps/` is
+# copied from the `wasmtime-wasi-http` locked here (`just wit-deps`).
+wasmtime = { version = "49.0.4", default-features = false }
+wasmtime-wasi = { version = "49.0.4", default-features = false }
+wasmtime-wasi-http = { version = "49.0.4", default-features = false }
+# The export and import names of a function's component, read before it
+# compiles (FN-01): the version wasmtime 49.0.4 already locks.
+wasmparser = { version = "0.258.3", default-features = false }
+# Test-only: components written as WAT, for what a Rust guest cannot do
+# (several memories, a large table, a forbidden import; FN-01, FN-06).
+wat = { version = "1.258.3", default-features = false }
+# The client of an allowed `wasi:http` request, which connects to the
+# address it checked (MOD-07): the crates `wasmtime-wasi-http`'s own
+# client is built of, at its versions.
+bytes = { version = "1.11", default-features = false }
+http-body = "1.0"
+hyper = { version = "1.9", default-features = false }
+# The function listener of `liftoffd` (plan phase 4, task 2.4) serves
+# hyper over tokio sockets: the version axum already locks.
+hyper-util = { version = "0.1.21", default-features = false }
+rustls = { version = "0.23", default-features = false }
+tokio-rustls = { version = "0.26.4", default-features = false }
+# The tunnel of `lof dev` (spec 7; plan phase 4, task 2.5): WebSocket
+# framing on both sides and the multiplexer inside it.
+tokio-tungstenite = { version = "0.30", default-features = false }
+yamux = { version = "0.14", default-features = false }
+webpki-roots = { version = "1.0.7", default-features = false }
+
+# Module registry (plan phase 2, task 2.4). `minisign` signs releases in
+# the fakes of `liftoff-core` (feature `test-support`) only; the daemon
+# verifies them.
+minisign = { version = "0.10", default-features = false }
+minisign-verify = { version = "0.3", default-features = false }
+# Module configurations against their `config_schema` (REG-04): without
+# `resolve-http`/`resolve-file`, a schema's `$ref` reaches nothing outside
+# it, so the core stays free of HTTP and file I/O.
+jsonschema = { version = "0.59", default-features = false }
+# `liftoffd_min` against the daemon's version (REG-02).
+semver = { version = "1.0", default-features = false }
+
+# CLI
+clap = { version = "4.6", default-features = false }
+comfy-table = { version = "8.0", default-features = false }
+inquire = { version = "0.9", default-features = false }
+# `lof dev` ends the dev command's process group on Ctrl-C (`kill(-pgid)`,
+# a safe call where `libc` would need `unsafe`); already in the tree
+# through crossterm and wasmtime.
+rustix = { version = "1.1", default-features = false }
+
+# Serialization / config
+serde = { version = "1.0", default-features = false }
+serde_json = { version = "1.0", default-features = false }
+figment = { version = "0.10", default-features = false }
+humantime-serde = "1.1"
+toml = { version = "0.8", default-features = false }
+# The key path of a `liftoff.toml` error (`service.expose`); already in the
+# tree through axum.
+serde_path_to_error = { version = "0.1", default-features = false }
+serde-saphyr = { version = "2.0", default-features = false }
+
+# Operating-system randomness (daemon: ULIDs and token secrets)
+getrandom = { version = "0.4", default-features = false }
+
+# Domain primitives
+time = { version = "0.3.47", default-features = false }
+ulid = { version = "3.0", default-features = false }
+sha2 = { version = "0.11", default-features = false }
+# The `Sec-WebSocket-Accept` of `GET /api/v1/tunnel` (RFC 6455 4.2.2; plan
+# phase 4, task 2.7); already in the tree through tungstenite.
+sha1 = { version = "0.11", default-features = false }
+futures-core = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false }
+
+# Errors
+thiserror = { version = "2.0", default-features = false }
+anyhow = { version = "1.0", default-features = false }
+
+# OpenAPI
+utoipa = { version = "5", default-features = false }
+
+# MCP (spec 8.3; plan phase 2, task 2.9): the stdio server of `lof mcp`
+# and the JSON Schemas of its tools.
+rmcp = { version = "3.5", default-features = false }
+schemars = { version = "1.2", default-features = false }
+
+# Observability
+tracing = { version = "0.1", default-features = false }
+tracing-subscriber = { version = "0.3", default-features = false }
+
+# Test-only
+# Signs the ID tokens of the fake OIDC provider in the host tests of the
+# `oidc` module (crates/wasm/tests/oidc.rs): an RSA key generated per run,
+# nothing committed. Already in the tree through rustls.
+aws-lc-rs = { version = "1.18", default-features = false }
+rstest = { version = "0.27", default-features = false }
+insta = { version = "1.49", default-features = false }
+tempfile = { version = "3.27", default-features = false }
+
+# -----------------------------------------------------------------------------
+# Lints: every crate opts in with `[lints] workspace = true`.
+# Levels here are `warn`; CI and the git hooks run clippy with `-D warnings`,
+# so locally you see warnings and nothing merges with them.
+# Use `#[expect(lint, reason = "...")]` (never `allow`) to override one.
+# -----------------------------------------------------------------------------
+[workspace.lints.rust]
+# Safety / correctness
+unsafe_code = "forbid"
+non_ascii_idents = "forbid"
+future_incompatible = { level = "warn", priority = -1 }
+nonstandard_style = { level = "warn", priority = -1 }
+rust_2018_idioms = { level = "warn", priority = -1 }
+rust_2024_compatibility = { level = "warn", priority = -1 }
+let_underscore_drop = "warn"
+ambiguous_negative_literals = "warn"
+closure_returning_async_block = "warn"
+macro_use_extern_crate = "warn"
+meta_variable_misuse = "warn"
+redundant_lifetimes = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unit_bindings = "warn"
+unnameable_types = "warn"
+unreachable_pub = "warn"
+unused_import_braces = "warn"
+unused_lifetimes = "warn"
+unused_macro_rules = "warn"
+unused_qualifications = "warn"
+variant_size_differences = "warn"
+# Documentation
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+
+[workspace.lints.rustdoc]
+all = { level = "warn", priority = -1 }
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"
+missing_crate_level_docs = "warn"
+unescaped_backticks = "warn"
+private_doc_tests = "allow"
+
+[workspace.lints.clippy]
+# Groups (priority -1 so individual lints below win)
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+# `cargo` group: this one is unavoidable in any real dependency tree.
+multiple_crate_versions = "allow"
+# `pedantic`: the crate layout intentionally repeats names (rest::RestConfig).
+module_name_repetitions = "allow"
+# `nursery`: conflicts with `unreachable_pub`, which we prefer (explicit visibility).
+redundant_pub_crate = "allow"
+# `cargo`: clippy checks the features of *every* workspace member while
+# linting *each* crate, so an `#[expect]` in one crate cannot cover it. The
+# fakes feature is called `test-support` on purpose (plan 1.3).
+redundant_feature_names = "allow"
+
+# --- restriction: no panics in production code -------------------------------
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+unreachable = "warn"
+todo = "warn"
+unimplemented = "warn"
+unwrap_in_result = "warn"
+get_unwrap = "warn"
+indexing_slicing = "warn"
+string_slice = "warn"
+missing_asserts_for_indexing = "warn"
+missing_assert_message = "warn"
+exit = "warn"
+infinite_loop = "warn"
+
+# --- restriction: arithmetic & conversions (overflow / truncation safety) ---
+arithmetic_side_effects = "warn"
+integer_division = "warn"
+as_conversions = "warn"
+as_underscore = "warn"
+as_pointer_underscore = "warn"
+fn_to_numeric_cast_any = "warn"
+lossy_float_literal = "warn"
+float_cmp_const = "warn"
+unseparated_literal_suffix = "warn"
+suspicious_xor_used_as_pow = "warn"
+modulo_arithmetic = "allow"
+
+# --- restriction: memory & resources -----------------------------------------
+mem_forget = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+clone_on_ref_ptr = "warn"
+large_include_file = "warn"
+verbose_file_reads = "warn"
+filetype_is_file = "warn"
+pathbuf_init_then_push = "warn"
+format_push_string = "warn"
+str_to_string = "warn"
+needless_raw_strings = "warn"
+redundant_type_annotations = "warn"
+deref_by_slicing = "warn"
+empty_drop = "warn"
+empty_structs_with_brackets = "warn"
+empty_enum_variants_with_brackets = "warn"
+unneeded_field_pattern = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+ref_patterns = "warn"
+pub_without_shorthand = "warn"
+renamed_function_params = "warn"
+same_name_method = "warn"
+mixed_read_write_in_expression = "warn"
+if_then_some_else_none = "warn"
+unused_result_ok = "warn"
+let_underscore_must_use = "warn"
+let_underscore_untyped = "warn"
+map_err_ignore = "warn"
+error_impl_error = "warn"
+return_and_then = "warn"
+
+# --- restriction: unsafe hygiene (moot while `unsafe_code = forbid`, but keeps
+# the bar if a crate ever has to relax it) ------------------------------------
+undocumented_unsafe_blocks = "warn"
+multiple_unsafe_ops_per_block = "warn"
+unnecessary_safety_comment = "warn"
+unnecessary_safety_doc = "warn"
+
+# --- restriction: debugging leftovers & output discipline --------------------
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+use_debug = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+tests_outside_test_module = "warn"
+mod_module_files = "warn"
+disallowed_script_idents = "warn"
+
+# -----------------------------------------------------------------------------
+# Profiles
+# -----------------------------------------------------------------------------
+[profile.dev]
+# Dependencies compiled with optimisations once; the workspace stays fast to
+# iterate on while tests run at a usable speed.
+opt-level = 0
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
+
+[profile.test]
+inherits = "dev"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+# Keep integer overflow a hard error in production. The cost is a few percent
+# of throughput; the benefit is that arithmetic bugs fail loudly instead of
+# silently wrapping into logic/security bugs.
+overflow-checks = true
+debug-assertions = false
+debug = false
+strip = "symbols"
+incremental = false
+
+# Same optimisation as `release` but with symbols kept for profiling.
+[profile.profiling]
+inherits = "release"
+strip = "none"
+debug = "line-tables-only"

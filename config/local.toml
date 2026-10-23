@@ -1,0 +1,18 @@
+# Developer overrides used by `just serve`.
+[log]
+level = "debug"
+format = "pretty"
+
+[api]
+public_url = "http://liftoff.localhost"
+
+[domains]
+base = "apps.localhost"
+public_ip = "127.0.0.1"
+
+[proxy]
+tls = "edge"
+edge_port = 7002
+# Not 2019: a Caddy of the host may listen there, and the daemon replaces
+# the whole configuration of the Caddy it is pointed at.
+admin = "127.0.0.1:2999"

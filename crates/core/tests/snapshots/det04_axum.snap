@@ -1,0 +1,9 @@
+---
+source: crates/core/tests/detect.rs
+---
+[service]
+compose = "deploy/compose.yaml"
+expose = "api:8080"
+
+[dev]
+command = "cargo run"

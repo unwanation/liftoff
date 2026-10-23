@@ -1,0 +1,22 @@
+[package]
+name = "liftoff-function-rust"
+description = "Contract function in Rust: the one HTTP behaviour the Rust, TS and Python functions share."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+# `fn_rust.wasm` in `modules/target/wasm32-wasip2/release/`.
+name = "fn_rust"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
+wit-bindgen = { workspace = true }

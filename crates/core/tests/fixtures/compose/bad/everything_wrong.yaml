@@ -1,0 +1,26 @@
+include:
+  - other.yaml
+secrets:
+  token:
+    file: ./token.txt
+x-anchors: {}
+services:
+  web:
+    image: nginx
+    privileged: true
+    foo: 1
+    env_file: prod.env
+    volumes:
+      - ./data:/data
+      - /var/run/docker.sock:/sock
+      - cache:/cache
+    networks:
+      - nowhere
+  worker:
+    build: .
+volumes:
+  data:
+    external: true
+networks:
+  outside:
+    external: true

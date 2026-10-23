@@ -1,0 +1,9 @@
+---
+source: crates/core/tests/detect.rs
+---
+[service]
+compose = "deploy/compose.yaml"
+expose = "web:3000"
+
+[dev]
+command = "pnpm dev"

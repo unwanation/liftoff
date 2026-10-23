@@ -1,0 +1,43 @@
+[alias]
+# The exact clippy invocation used by hooks and CI.
+lint = "clippy --workspace --all-targets --all-features --locked -- -D warnings"
+# Everything CI checks, in one command (see also `just ci`).
+nt = "nextest run --workspace --all-features --locked"
+
+[build]
+# Deny warnings everywhere so a stray `warn` never lands; `cargo fix` still works.
+rustflags = ["-D", "warnings"]
+
+[target.x86_64-unknown-linux-gnu]
+# Hardening flags for Linux release artifacts: full RELRO + immediate binding
+# (defeats GOT overwrite), and non-executable stack is the default.
+rustflags = [
+  "-D",
+  "warnings",
+  "-C",
+  "relro-level=full",
+  "-C",
+  "link-arg=-Wl,-z,now",
+  "-C",
+  "link-arg=-Wl,-z,noexecstack",
+]
+
+[target.x86_64-unknown-linux-musl]
+rustflags = [
+  "-D",
+  "warnings",
+  "-C",
+  "relro-level=full",
+  "-C",
+  "link-arg=-Wl,-z,now",
+  "-C",
+  "link-arg=-Wl,-z,noexecstack",
+  "-C",
+  "target-feature=+crt-static",
+]
+
+[net]
+retry = 3
+
+[registries.crates-io]
+protocol = "sparse"

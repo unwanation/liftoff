@@ -1,0 +1,33 @@
+[package]
+name = "liftoff-store"
+description = "SQLite storage for the liftoff daemon."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+liftoff-core = { workspace = true }
+# The rules of module tables (`store-query`), shared with the CLI's local
+# module store.
+liftoff-module-sql = { workspace = true }
+
+rusqlite = { workspace = true, features = ["bundled", "cache", "hooks", "limits"] }
+rusqlite_migration = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
+# Temporary files renamed into place: the atomic writes of blobs.
+tempfile = { workspace = true }
+time = { workspace = true, features = ["std", "formatting", "parsing"] }
+tokio = { workspace = true, features = ["rt"] }
+tracing = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+liftoff-core = { workspace = true, features = ["test-support"] }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }

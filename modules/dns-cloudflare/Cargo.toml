@@ -1,0 +1,27 @@
+[package]
+name = "liftoff-module-dns-cloudflare"
+description = "The dns.cloudflare module of liftoff: Cloudflare A records for managed domains and their proxied flag."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+# The oldest liftoffd the module runs on: `liftoffd_min` of its release in
+# the registry's index.json (modules/registry/release.sh, REG-02).
+[package.metadata.liftoff]
+liftoffd_min = "2.0.0-alpha.2"
+
+[lib]
+# `dns_cloudflare.wasm` in `modules/target/wasm32-wasip2/release/`.
+name = "dns_cloudflare"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
+wit-bindgen = { workspace = true }

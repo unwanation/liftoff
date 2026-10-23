@@ -1,0 +1,8 @@
+lockfileVersion: '9.0'
+
+importers:
+  .:
+    dependencies:
+      next:
+        specifier: 15.0.0
+        version: 15.0.0

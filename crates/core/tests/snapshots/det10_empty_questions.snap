@@ -1,0 +1,12 @@
+---
+source: crates/core/tests/detect.rs
+---
+[
+    Kind,
+    Expose {
+        candidates: [],
+    },
+    Build,
+    DevCommand,
+    Group,
+]

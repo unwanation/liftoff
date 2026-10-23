@@ -1,0 +1,26 @@
+---
+source: crates/liftoffd/tests/setup.rs
+---
+# /etc/liftoff/liftoffd.toml, written by `liftoffd setup`.
+# Every key not here keeps its default (config/default.toml); env
+# LIFTOFF_<SECTION>__<KEY> overrides a key. Secrets live in files only.
+
+[api]
+public_url = "https://apps.test"
+bind = "127.0.0.1:7000"
+
+[domains]
+base = "apps.test"
+public_ip = "203.0.113.10"
+
+[proxy]
+tls = "edge"
+edge_port = 7002
+admin = "127.0.0.1:2019"
+
+[store]
+path = "/var/lib/liftoff/liftoff.db"
+
+[paths]
+data = "/var/lib/liftoff"
+master_key = "/etc/liftoff/master.key"

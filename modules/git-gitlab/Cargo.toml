@@ -1,0 +1,28 @@
+[package]
+name = "liftoff-module-git-gitlab"
+description = "The git.gitlab module of liftoff: the core's Git port over the GitLab API (gitlab.com or a self-hosted GitLab) as the user's own connection, OAuth device flow or token."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+# The oldest liftoffd the module runs on: `liftoffd_min` of its release in
+# the registry's index.json (modules/registry/release.sh, REG-02). The
+# device flow tools need the `Git` port of 2.0.0-alpha.3.
+[package.metadata.liftoff]
+liftoffd_min = "2.0.0-alpha.3"
+
+[lib]
+# `git_gitlab.wasm` in `modules/target/wasm32-wasip2/release/`.
+name = "git_gitlab"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
+wit-bindgen = { workspace = true }

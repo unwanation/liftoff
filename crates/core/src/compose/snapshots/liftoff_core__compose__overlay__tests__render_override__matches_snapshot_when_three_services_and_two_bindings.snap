@@ -1,0 +1,21 @@
+---
+source: crates/core/src/compose/overlay.rs
+expression: out
+---
+services:
+  web:
+    cgroup_parent: apps-lf-acme-qa.slice
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+    ports:
+      - "127.0.0.1:20017:3000"
+  worker:
+    cgroup_parent: apps-lf-acme-qa.slice
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+    ports:
+      - "127.0.0.1:20018:8080"
+  db:
+    cgroup_parent: apps-lf-acme-qa.slice
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }

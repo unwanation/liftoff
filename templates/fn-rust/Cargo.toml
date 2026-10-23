@@ -1,0 +1,23 @@
+[package]
+name = "function"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde_json = { version = "1.0", default-features = false, features = ["std"] }
+wit-bindgen = { version = "0.63", default-features = false, features = [
+  "macros",
+  "realloc",
+  "std",
+] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+
+[workspace]

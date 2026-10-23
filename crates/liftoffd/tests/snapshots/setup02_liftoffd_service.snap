@@ -1,0 +1,38 @@
+---
+source: crates/liftoffd/tests/setup.rs
+---
+# /etc/systemd/system/liftoffd.service, installed by `liftoffd setup`.
+[Unit]
+Description=liftoff daemon
+Documentation=https://github.com/unwanation/liftoff
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=exec
+User=liftoff
+Group=liftoff
+Environment=HOME=/var/lib/liftoff
+ExecStart=/usr/local/bin/liftoffd --config /etc/liftoff/liftoffd.toml serve
+# Exit 78 (EX_CONFIG) is a configuration error: a restart cannot fix it and
+# would only loop. Anything else is retried.
+Restart=on-failure
+RestartSec=5s
+RestartPreventExitStatus=78
+# SIGTERM reaches liftoffd only, not the `docker compose` children of a
+# running deploy; liftoffd lets them finish within [deploy] wait_timeout.
+KillMode=mixed
+# Longer than the default [deploy] wait_timeout (120s) plus the HTTP drain.
+TimeoutStopSec=150
+
+# Hardening. No NoNewPrivileges= (nor the options that imply it:
+# SystemCallFilter=, RestrictSUIDSGID=, PrivateDevices=, ...): liftoffd runs
+# `sudo -n systemctl` for its slices.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/liftoff -/run/sudo
+ProtectHome=true
+PrivateTmp=true
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

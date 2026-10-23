@@ -1,0 +1,9 @@
+# Pinned so every developer, hook and CI job uses the identical compiler,
+# clippy and rustfmt. Bump deliberately (and bump `rust-version` in Cargo.toml
+# and the Dockerfile builder image together).
+[toolchain]
+channel = "1.98.1"
+components = ["clippy", "rustfmt", "rust-src", "rust-analyzer"]
+profile = "minimal"
+# Modules and their contract components (modules/, spec 3.5).
+targets = ["wasm32-wasip2"]

@@ -1,0 +1,21 @@
+[package]
+name = "liftoff-function-misbehave"
+description = "Contract component of the function runtime: traps, memory, timeouts, kv, outgoing HTTP and warm-up."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+# `fn_misbehave.wasm` in `modules/target/wasm32-wasip2/release/`.
+name = "fn_misbehave"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+wit-bindgen = { workspace = true }

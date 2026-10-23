@@ -1,0 +1,14 @@
+include: forbidden
+networks.outside.external: forbidden
+secrets.token.file: forbidden
+services.web.env_file: must be ".env"
+services.web.foo: unknown key
+services.web.networks[0]: network "nowhere" is not declared in top-level networks
+services.web.privileged: forbidden
+services.web.volumes[0]: bind mounts are forbidden
+services.web.volumes[1]: bind mounts are forbidden
+services.web.volumes[2]: volume "cache" is not declared in top-level volumes
+services.worker.build: forbidden
+services.worker.image: required
+volumes.data.external: forbidden
+x-anchors: unknown key

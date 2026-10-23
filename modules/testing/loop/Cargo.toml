@@ -1,0 +1,21 @@
+[package]
+name = "liftoff-module-loop"
+description = "Contract component of the module host: a call that never returns."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+# `loop.wasm` in `modules/target/wasm32-wasip2/release/`.
+name = "loop"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+wit-bindgen = { workspace = true }

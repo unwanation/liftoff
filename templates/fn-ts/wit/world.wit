@@ -1,0 +1,17 @@
+// The world of a liftoff function: the standard `wasi:http/proxy` world
+// plus `wasi:config/store` (the environment's secrets) and
+// `wasi:keyvalue` (the environment's key-value store). Nothing of
+// liftoff's own, so the component runs on any host of these worlds.
+//
+// `deps/` is the WIT of WASI 0.2 these imports come from, as the liftoff
+// server links them (wasmtime 49).
+package liftoff:function@0.1.0;
+
+world function {
+  include wasi:http/proxy@0.2.12;
+
+  import wasi:config/store@0.2.0-rc.1;
+  import wasi:keyvalue/store@0.2.0-draft;
+  import wasi:keyvalue/atomics@0.2.0-draft;
+  import wasi:keyvalue/batch@0.2.0-draft;
+}

@@ -1,0 +1,204 @@
+# The modules of liftoff: one crate per module plus the host's
+# contract components under `testing/`. A workspace of its own because
+# every crate here targets `wasm32-wasip2`: `just modules` builds them with
+# `cargo build --target wasm32-wasip2 --release`, which links a component
+# directly (no `cargo-component`, which is unmaintained). The WIT world is
+# the repository's `wit/` directory, shared with the host in `crates/wasm`.
+
+[workspace]
+resolver = "3"
+members = [
+  "dns-cloudflare",
+  "git-forgejo",
+  "git-github",
+  "git-gitlab",
+  "mcp",
+  "oidc",
+  "tenants",
+  "testing/allimports",
+  "testing/badhost",
+  "testing/badmanifest",
+  "testing/denier",
+  "testing/functions/misbehave",
+  "testing/functions/rust",
+  "testing/loop",
+  "testing/probe",
+  "testing/trap",
+  "web",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/unwanation/liftoff"
+authors = ["unwanation <unwanation@gmail.com>"]
+publish = false
+
+[workspace.dependencies]
+wit-bindgen = { version = "0.63", default-features = false, features = [
+  "macros",
+  "realloc",
+  "std",
+] }
+serde = { version = "1.0", default-features = false, features = ["derive", "std"] }
+serde_json = { version = "1.0", default-features = false, features = ["std"] }
+# `oidc`: the ID token's RS256 check in pure Rust (no C toolchain for
+# wasm32-wasip2), its randomness from `wasi:random`.
+base64 = { version = "0.23", default-features = false, features = ["alloc"] }
+getrandom = { version = "0.3", default-features = false }
+num-bigint = { version = "0.4", default-features = false }
+sha2 = { version = "0.10", default-features = false }
+# `git.github`: a CI secret goes to GitHub in a libsodium sealed box of
+# the repository's key (X25519 + XSalsa20-Poly1305, pure Rust); the
+# ephemeral key's randomness comes from `getrandom` through `rand_core`.
+crypto_box = { version = "0.9", default-features = false }
+rand_core = { version = "0.6", default-features = false }
+
+# -----------------------------------------------------------------------------
+# Lints: every crate opts in with `[lints] workspace = true`.
+# Levels here are `warn`; CI and the git hooks run clippy with `-D warnings`,
+# so locally you see warnings and nothing merges with them.
+# Use `#[expect(lint, reason = "...")]` (never `allow`) to override one.
+# -----------------------------------------------------------------------------
+[workspace.lints.rust]
+# Safety / correctness
+# `deny`, not `forbid`: the bindings `wit-bindgen` generates are unsafe
+# glue, and only `deny` lets `#[expect(unsafe_code)]` admit them.
+unsafe_code = "deny"
+non_ascii_idents = "forbid"
+future_incompatible = { level = "warn", priority = -1 }
+nonstandard_style = { level = "warn", priority = -1 }
+rust_2018_idioms = { level = "warn", priority = -1 }
+rust_2024_compatibility = { level = "warn", priority = -1 }
+let_underscore_drop = "warn"
+ambiguous_negative_literals = "warn"
+closure_returning_async_block = "warn"
+macro_use_extern_crate = "warn"
+meta_variable_misuse = "warn"
+redundant_lifetimes = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unit_bindings = "warn"
+unnameable_types = "warn"
+unreachable_pub = "warn"
+unused_import_braces = "warn"
+unused_lifetimes = "warn"
+unused_macro_rules = "warn"
+unused_qualifications = "warn"
+variant_size_differences = "warn"
+# Documentation
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+
+[workspace.lints.rustdoc]
+all = { level = "warn", priority = -1 }
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"
+missing_crate_level_docs = "warn"
+unescaped_backticks = "warn"
+private_doc_tests = "allow"
+
+[workspace.lints.clippy]
+# Groups (priority -1 so individual lints below win)
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+# `cargo` group: this one is unavoidable in any real dependency tree.
+multiple_crate_versions = "allow"
+# `pedantic`: the crate layout intentionally repeats names (rest::RestConfig).
+module_name_repetitions = "allow"
+# `nursery`: conflicts with `unreachable_pub`, which we prefer (explicit visibility).
+redundant_pub_crate = "allow"
+
+# --- restriction: no panics in production code -------------------------------
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+unreachable = "warn"
+todo = "warn"
+unimplemented = "warn"
+unwrap_in_result = "warn"
+get_unwrap = "warn"
+indexing_slicing = "warn"
+string_slice = "warn"
+missing_asserts_for_indexing = "warn"
+missing_assert_message = "warn"
+exit = "warn"
+infinite_loop = "warn"
+
+# --- restriction: arithmetic & conversions (overflow / truncation safety) ---
+arithmetic_side_effects = "warn"
+integer_division = "warn"
+as_conversions = "warn"
+as_underscore = "warn"
+as_pointer_underscore = "warn"
+fn_to_numeric_cast_any = "warn"
+lossy_float_literal = "warn"
+float_cmp_const = "warn"
+unseparated_literal_suffix = "warn"
+suspicious_xor_used_as_pow = "warn"
+modulo_arithmetic = "allow"
+
+# --- restriction: memory & resources -----------------------------------------
+mem_forget = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+clone_on_ref_ptr = "warn"
+large_include_file = "warn"
+verbose_file_reads = "warn"
+filetype_is_file = "warn"
+pathbuf_init_then_push = "warn"
+format_push_string = "warn"
+str_to_string = "warn"
+needless_raw_strings = "warn"
+redundant_type_annotations = "warn"
+deref_by_slicing = "warn"
+empty_drop = "warn"
+empty_structs_with_brackets = "warn"
+empty_enum_variants_with_brackets = "warn"
+unneeded_field_pattern = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+ref_patterns = "warn"
+pub_without_shorthand = "warn"
+renamed_function_params = "warn"
+same_name_method = "warn"
+mixed_read_write_in_expression = "warn"
+if_then_some_else_none = "warn"
+unused_result_ok = "warn"
+let_underscore_must_use = "warn"
+let_underscore_untyped = "warn"
+map_err_ignore = "warn"
+error_impl_error = "warn"
+return_and_then = "warn"
+
+# --- restriction: unsafe hygiene (moot while `unsafe_code = forbid`, but keeps
+# the bar if a crate ever has to relax it) ------------------------------------
+undocumented_unsafe_blocks = "warn"
+multiple_unsafe_ops_per_block = "warn"
+unnecessary_safety_comment = "warn"
+unnecessary_safety_doc = "warn"
+
+# --- restriction: debugging leftovers & output discipline --------------------
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+use_debug = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+tests_outside_test_module = "warn"
+mod_module_files = "warn"
+disallowed_script_idents = "warn"
+
+# -----------------------------------------------------------------------------
+# Profiles
+# -----------------------------------------------------------------------------
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+overflow-checks = true
+debug = false
+strip = "symbols"

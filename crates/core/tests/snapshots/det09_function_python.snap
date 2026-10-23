@@ -1,0 +1,6 @@
+---
+source: crates/core/tests/detect.rs
+---
+[function]
+build = "uv run componentize-py -d wit -w proxy componentize app -o dist/fn.wasm"
+component = "dist/fn.wasm"

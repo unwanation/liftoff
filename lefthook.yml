@@ -1,0 +1,82 @@
+# Git hooks (https://lefthook.dev). Install once with `lefthook install`
+# (`just setup` does it). Every check here is the same command CI runs, so a
+# green hook means a green pipeline.
+#
+# Skip once with `LEFTHOOK=0 git commit` when you really must.
+
+min_version: 1.10.0
+no_tty: false
+
+output:
+  - summary
+  - failure
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: rustfmt
+      glob: "*.rs"
+      run: cargo fmt --all -- --check && cargo fmt --all --manifest-path modules/Cargo.toml -- --check
+    - name: taplo
+      glob: "*.toml"
+      run: taplo fmt --check {staged_files}
+    - name: typos
+      run: typos --force-exclude {staged_files}
+    - name: gitleaks
+      run: gitleaks git --pre-commit --staged --redact --no-banner
+    - name: shellcheck
+      glob: "*.sh"
+      run: shellcheck --severity=warning {staged_files}
+    - name: hadolint
+      glob: "Dockerfile*"
+      run: hadolint {staged_files}
+    - name: actionlint
+      glob: ".github/workflows/*.{yml,yaml}"
+      run: actionlint {staged_files}
+    - name: zizmor
+      glob: ".github/workflows/*.{yml,yaml}"
+      run: zizmor --persona=pedantic --offline {staged_files}
+    - name: clippy
+      glob: "{*.rs,Cargo.toml,Cargo.lock,clippy.toml}"
+      run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+    - name: clippy-modules
+      glob: "{modules/**/*.rs,modules/**/Cargo.toml,modules/Cargo.lock,wit/**/*.wit}"
+      run: cargo clippy --manifest-path modules/Cargo.toml --workspace --all-targets --target wasm32-wasip2 --locked -- -D warnings
+    - name: machete
+      glob: "Cargo.toml"
+      run: cargo machete --with-metadata
+
+commit-msg:
+  jobs:
+    - name: conventional-commit
+      run: committed --commit-file {1}
+
+pre-push:
+  # Sequential on purpose: `cargo hack --no-dev-deps` rewrites Cargo.toml on
+  # disk while it runs, so tests compiled at the same time lose dev-deps.
+  parallel: false
+  jobs:
+    - name: modules
+      run: cargo build --manifest-path modules/Cargo.toml --workspace --target wasm32-wasip2 --release --locked
+    - name: tests
+      run: cargo nextest run --workspace --all-features --locked
+    - name: doctests
+      run: cargo test --workspace --all-features --locked --doc
+    - name: module-releases
+      run: modules/registry/check.sh
+    - name: wit-deps
+      run: scripts/wit-deps.sh --check
+    - name: deny
+      run: cargo deny --workspace --all-features check
+    - name: deny-modules
+      run: cargo deny --manifest-path modules/Cargo.toml --workspace --all-features --config deny.toml check
+    - name: feature-matrix
+      run: cargo hack check --workspace --feature-powerset --no-dev-deps
+    - name: docs
+      run: cargo doc --workspace --all-features --no-deps --locked
+      env:
+        RUSTDOCFLAGS: -D warnings
+    - name: docs-modules
+      run: cargo doc --manifest-path modules/Cargo.toml --workspace --target wasm32-wasip2 --no-deps --locked
+      env:
+        RUSTDOCFLAGS: -D warnings

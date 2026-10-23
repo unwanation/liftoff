@@ -1,0 +1,57 @@
+[package]
+name = "liftoff-core"
+description = "Domain model, ports and services of liftoff. No I/O, no framework types."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Hand-written fakes of every port (crate::fakes), for the test suites of
+# the services, the REST adapter and the store contract.
+test-support = ["dep:minisign"]
+
+[dependencies]
+base64 = { workspace = true, features = ["std"] }
+chacha20poly1305 = { workspace = true, features = ["alloc", "getrandom"] }
+futures-core = { workspace = true }
+# `lock::Mutex`: the lock of the kept component files (FDEP-06); no
+# runtime, it parks the waiting task through its waker.
+futures-util = { workspace = true, features = ["std"] }
+# `system::OsRng`: ULIDs and token secrets from the operating system (the
+# same crate `chacha20poly1305` draws its nonces from).
+getrandom = { workspace = true }
+# The configuration of a module against its `config_schema` (REG-04).
+jsonschema = { workspace = true }
+# test-support: the fake module registry signs its releases (REG-01).
+minisign = { workspace = true, optional = true }
+# The signature of a module release (REG-01).
+minisign-verify = { workspace = true }
+# `liftoffd_min` against the daemon's version (REG-02).
+semver = { workspace = true, features = ["std"] }
+serde = { workspace = true, features = ["derive", "std"] }
+serde-saphyr = { workspace = true, features = ["deserialize"] }
+# Module manifests (JSON Schema fields) and `core-call` arguments.
+serde_json = { workspace = true, features = ["std"] }
+# The key path of a `liftoff.toml` error (TPL-01).
+serde_path_to_error = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+# `formatting`: the RFC 3339 times of `core-call` answers, as REST has them;
+# `std`: `system::SystemClock`.
+time = { workspace = true, features = ["formatting", "std"] }
+# `liftoff.toml`, the project manifest.
+toml = { workspace = true, features = ["parse"] }
+tracing = { workspace = true, features = ["std"] }
+ulid = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+rstest = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }

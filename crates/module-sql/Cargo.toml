@@ -1,0 +1,25 @@
+[package]
+name = "liftoff-module-sql"
+description = "The SQL of liftoff modules' storage over SQLite: key spaces and store-query behind one authorizer."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+liftoff-core = { workspace = true }
+
+# A blob of a `store-query` answer as base64.
+base64 = { workspace = true, features = ["alloc"] }
+# `hooks`: the authorizer; `limits`: the length and column caps of a
+# statement; `cache`: prepared statements of the key space; `bundled`: the
+# SQLite both stores link (and its `SqlInputError` the messages read).
+rusqlite = { workspace = true, features = ["bundled", "cache", "hooks", "limits"] }
+serde_json = { workspace = true, features = ["std"] }
+tracing = { workspace = true, features = ["std"] }
