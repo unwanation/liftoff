@@ -5,3 +5,5 @@
 !.cargo/
 !crates/
 !config/
+!scripts/
+!wit/
