@@ -14,7 +14,12 @@ ENV RUSTUP_TOOLCHAIN=1.98.1 \
     CARGO_NET_RETRY=10
 
 WORKDIR /src
-RUN rustup target add "${TARGET}"
+# musl-gcc: aws-lc-sys (reqwest's TLS) compiles C for the musl target.
+# hadolint ignore=DL3008
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends musl-tools \
+    && rm -rf /var/lib/apt/lists/* \
+    && rustup target add "${TARGET}"
 
 COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \

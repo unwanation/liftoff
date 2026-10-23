@@ -39,10 +39,12 @@ for template in "$root"/templates/fn-*/; do
   copy="$work/$name"
   rm -rf "$copy"
   mkdir -p "$copy"
-  (cd "$template" && git ls-files -z . | xargs -0 cp --parents -t "$copy")
+  # tar, not `cp --parents`: macOS has no GNU cp.
+  (cd "$template" && git ls-files -z . | tar --null -T - -cf - | tar -xf - -C "$copy")
   manifest="$copy/liftoff.toml"
   while IFS= read -r file; do
-    [ -n "$file" ] && sed -i "s/{{project}}/$project/g" "$copy/$file"
+    [ -n "$file" ] && sed "s/{{project}}/$project/g" "$copy/$file" >"$copy/$file.tmp" &&
+      mv "$copy/$file.tmp" "$copy/$file"
   done < <(substituted "$manifest")
   build=$(value "$manifest" function build)
   component=$(value "$manifest" function component)

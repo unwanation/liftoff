@@ -161,6 +161,9 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0 # gitleaks scans history
+      # Before mise: its cargo tools would each install the toolchain of
+      # rust-toolchain.toml at once and collide.
+      - run: rustup toolchain install # from rust-toolchain.toml
       - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
         with:
           cache: true
