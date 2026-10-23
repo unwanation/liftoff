@@ -37,7 +37,7 @@ fn recorder(root: &Path) -> String {
     let root = root.display();
     format!(
         "for arg in \"$@\"; do printf '%s\\n' \"$arg\"; done > {root}/rec.args\n\
-         tr '\\000' '\\n' < /proc/$PPID/cmdline > {root}/rec.parent\n\
+         ps -ww -o args= -p $PPID > {root}/rec.parent\n\
          env > {root}/rec.env\n"
     )
 }
