@@ -63,7 +63,7 @@ chacha20poly1305 = { version = "0.11", default-features = false }
 base64 = { version = "0.23", default-features = false }
 # Test-only: the 1024-bit RSA signature the `oidc` module must refuse
 # (crates/wasm/tests/oidc.rs); aws-lc-rs signs with 2048 bits and more.
-num-bigint = { version = "0.4", default-features = false }
+num-bigint = { version = "0.5", default-features = false }
 # Test-only: the fake GitHub opens the libsodium sealed box `git.github`
 # seals a CI secret in (crates/wasm/tests/git_github.rs, GIT-05).
 crypto_box = { version = "0.9", default-features = false }
