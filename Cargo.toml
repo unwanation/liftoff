@@ -75,7 +75,7 @@ wasmtime-wasi = { version = "49.0.4", default-features = false }
 wasmtime-wasi-http = { version = "49.0.4", default-features = false }
 # The export and import names of a function's component, read before it
 # compiles (FN-01): the version wasmtime 49.0.4 already locks.
-wasmparser = { version = "0.258.3", default-features = false }
+wasmparser = { version = "0.262.0", default-features = false }
 # Test-only: components written as WAT, for what a Rust guest cannot do
 # (several memories, a large table, a forbidden import; FN-01, FN-06).
 wat = { version = "1.258.3", default-features = false }
