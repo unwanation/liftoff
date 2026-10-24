@@ -40,7 +40,7 @@ jobs:
       - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
         with:
           cache: false
-      - uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
         with:
           tool: cargo-cyclonedx
       # `cargo auditable` embeds the dependency list in the binary so
