@@ -35,5 +35,5 @@ Example: a WebSocket adapter named `ws`. Every step has a check.
    *Check:* `cargo check -p liftoffd`.
 
 6. **Document.** A `[ws]` section in `config/default.toml`, a row in the
-   README layout table, an env example in `.env.example`.
+   the layout table of CONTRIBUTING.md, an env example in `.env.example`.
    *Check:* `just ci` is green; `just serve` logs `WS listening`.

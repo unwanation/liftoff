@@ -12,6 +12,9 @@ binary `liftoffd` in `crates/liftoffd` and the CLI binary `liftoff` in
 «Modules» below). The sources of the templates liftoff ships are in
 `templates/<name>/` (published as repositories of their own;
 `crates/core/tests/templates.rs` parses each `liftoff.toml`). Design and the rules behind it: `docs/ARCHITECTURE.md`.
+What users do, command by command: `docs/REFERENCE.md` (the README
+stays a plain description of the features). Layout and checks:
+`CONTRIBUTING.md`.
 Adding an interface: `docs/ADDING_AN_INTERFACE.md`. Writing a module:
 `docs/MODULES.md`. Making a template: `docs/TEMPLATES.md`. Functions:
 `docs/FUNCTIONS.md`. `lof dev` and the tunnel: `docs/DEV.md`. Artifacts:
