@@ -45,15 +45,20 @@ impl ProjectManifest {
     /// the repository, a `generate` other than `random:<n>`, a `scope` or
     /// `group` outside its spellings.
     pub fn parse(text: &str) -> Result<Self, Error> {
-        let raw: raw::Manifest = serde_path_to_error::deserialize(toml::Deserializer::new(text))
-            .map_err(|error| {
-                let path = dotted(error.path());
-                let problem = Problem::Invalid(error.inner().message().trim().to_owned());
-                match path {
-                    Some(path) => ValidationError::at(Self::FIELD, path, problem),
-                    None => ValidationError::new(Self::FIELD, problem),
-                }
-            })?;
+        let toml = toml::Deserializer::parse(text).map_err(|error| {
+            ValidationError::new(
+                Self::FIELD,
+                Problem::Invalid(error.message().trim().to_owned()),
+            )
+        })?;
+        let raw: raw::Manifest = serde_path_to_error::deserialize(toml).map_err(|error| {
+            let path = dotted(error.path());
+            let problem = Problem::Invalid(error.inner().message().trim().to_owned());
+            match path {
+                Some(path) => ValidationError::at(Self::FIELD, path, problem),
+                None => ValidationError::new(Self::FIELD, problem),
+            }
+        })?;
         Ok(raw.into_manifest()?)
     }
 

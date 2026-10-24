@@ -122,7 +122,7 @@ serde = { version = "1.0", default-features = false }
 serde_json = { version = "1.0", default-features = false }
 figment = { version = "0.10", default-features = false }
 humantime-serde = "1.1"
-toml = { version = "0.8", default-features = false }
+toml = { version = "1", default-features = false, features = ["std", "serde"] }
 # The key path of a `liftoff.toml` error (`service.expose`); already in the
 # tree through axum.
 serde_path_to_error = { version = "0.1", default-features = false }
