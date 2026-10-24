@@ -62,7 +62,7 @@ environment, добавленного `lof env add <имя> --kind function`,
 
 | Шаблон | Сборка (`[function] build`) | Компонент | Нужно |
 |---|---|---|---|
-| `fn-rust` | `cargo build --target wasm32-wasip2 --release --locked` (`wit-bindgen` 0.63 над `wit/`) | `target/wasm32-wasip2/release/function.wasm` | Rust 1.98.1 с `wasm32-wasip2` (`rust-toolchain.toml`) |
+| `fn-rust` | `cargo build --target wasm32-wasip2 --release --locked` (`wit-bindgen` 0.63 над `wit/`) | `target/wasm32-wasip2/release/function.wasm` | Rust 1.99.0 с `wasm32-wasip2` (`rust-toolchain.toml`) |
 | `fn-ts` | `bun install && bun run build`: `bun build` в один ESM с внешними `wasi:*`, затем `jco componentize` 1.39.0 (`componentize-js` 0.23.0) | `dist/fn.wasm` | bun |
 | `fn-python` | `uv run componentize-py -d wit -w function componentize app -o dist/fn.wasm` (`componentize-py` 0.25.1 в `uv.lock`) | `dist/fn.wasm` | uv |
 

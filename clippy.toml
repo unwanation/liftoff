@@ -1,5 +1,5 @@
 # Thresholds and allow-lists for the lints enabled in Cargo.toml.
-msrv = "1.98"
+msrv = "1.99"
 avoid-breaking-exported-api = false
 
 # Panicking and printing are fine inside `#[cfg(test)]`.
