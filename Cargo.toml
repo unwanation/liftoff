@@ -146,7 +146,7 @@ thiserror = { version = "2.0", default-features = false }
 anyhow = { version = "1.0", default-features = false }
 
 # OpenAPI
-utoipa = { version = "5", default-features = false }
+utoipa = { version = "6", default-features = false }
 
 # MCP (spec 8.3; plan phase 2, task 2.9): the stdio server of `lof mcp`
 # and the JSON Schemas of its tools.
