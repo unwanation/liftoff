@@ -162,7 +162,7 @@ tracing-subscriber = { version = "0.3", default-features = false }
 # `oidc` module (crates/wasm/tests/oidc.rs): an RSA key generated per run,
 # nothing committed. Already in the tree through rustls.
 aws-lc-rs = { version = "1.18", default-features = false }
-rstest = { version = "0.27", default-features = false }
+rstest = { version = "0.28", default-features = false }
 insta = { version = "1.49", default-features = false }
 tempfile = { version = "3.27", default-features = false }
 
