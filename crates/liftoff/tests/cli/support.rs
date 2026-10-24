@@ -43,8 +43,10 @@ pub(crate) struct Seen {
     /// The `filename` of each field of [`Seen::parts`], in order (`None`
     /// for a field without one).
     pub(crate) filenames: Vec<Option<String>>,
-    /// `X-Liftoff-Project` (the tunnel's upgrade sends it).
-    pub(crate) project: Option<String>,
+    /// `X-Liftoff-Expose` (the tunnel's upgrade sends it).
+    pub(crate) expose: Option<String>,
+    /// Whether it carried `X-Liftoff-Share: 1`.
+    pub(crate) share: bool,
     /// The status the stub answered.
     pub(crate) status: u16,
 }
@@ -342,11 +344,12 @@ async fn handle(State(shared): State<Arc<Shared>>, request: Request) -> Response
         fields,
         parts: parts_seen,
         filenames,
-        project: parts
+        expose: parts
             .headers
-            .get(PROJECT_HEADER)
+            .get(EXPOSE_HEADER)
             .and_then(|value| value.to_str().ok())
             .map(str::to_owned),
+        share: parts.headers.contains_key(SHARE_HEADER),
         status: 404,
     };
     let answer = lock(&shared.rules)
@@ -375,8 +378,14 @@ async fn handle(State(shared): State<Arc<Shared>>, request: Request) -> Response
 /// The path of the tunnel's upgrade.
 const TUNNEL_PATH: &str = "/api/v1/tunnel";
 
-/// The header the CLI names its project in.
-const PROJECT_HEADER: &str = "x-liftoff-project";
+/// The header the CLI names its port in.
+const EXPOSE_HEADER: &str = "x-liftoff-expose";
+
+/// The header of `lof expose --share`.
+const SHARE_HEADER: &str = "x-liftoff-share";
+
+/// The zone the fake daemon's addresses are under.
+pub(crate) const ZONE: &str = "localhost.west.test";
 
 /// The one-time link the fake daemon answers the upgrade of a private
 /// tunnel with (`X-Liftoff-Login-Url`, DEVT-07).
@@ -392,9 +401,15 @@ pub(crate) struct TunnelOptions {
     /// (the network broke): the client must come back.
     pub(crate) drop_first: bool,
     /// The environment the fake names the tunnel (`Hello`); `None`:
-    /// `<project>-dev`, as single-user mode does.
+    /// the port, as a daemon on the CLI's own machine does.
     pub(crate) environment: Option<&'static str>,
+    /// The fake refuses every upgrade with this status and a problem
+    /// whose `detail` is [`REFUSAL`].
+    pub(crate) refuse: Option<u16>,
 }
+
+/// The `detail` of a refusal of [`TunnelOptions::refuse`].
+pub(crate) const REFUSAL: &str = "3000 is exposed by another user, not by owner";
 
 /// What the fake tunnel server saw of a connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -448,11 +463,12 @@ impl TunnelEvents {
 }
 
 /// The daemon's `GET /tunnel`, faked: `401` without the session of
-/// [`Cli::logged_in`], else the upgrade to the tunnel of
-/// `<project>-dev` (single-user mode; or [`TunnelOptions::environment`]) run by the real [`TunnelServer`]
-/// under that name. The `101` carries `X-Liftoff-Login-Url`
-/// ([`LOGIN_URL`]) unless a `POST .../<env>/share` the stub answered
-/// with a success came before it.
+/// [`Cli::logged_in`], [`TunnelOptions::refuse`] when set, else the
+/// upgrade to the tunnel of the port (or [`TunnelOptions::environment`])
+/// run by the real [`TunnelServer`] under that name. The `101` carries
+/// `X-Liftoff-Address` (`https://<env>.<zone>`, the zone [`ZONE`]) and, unless the
+/// upgrade carried `X-Liftoff-Share: 1`, `X-Liftoff-Login-Url`
+/// ([`LOGIN_URL`]).
 #[derive(Debug)]
 pub(crate) struct FakeTunnel {
     server: TunnelServer,
@@ -471,11 +487,14 @@ impl FakeTunnel {
                 .map(str::to_owned)
         };
         let authorization = header(header::AUTHORIZATION.as_str());
-        let project = header(PROJECT_HEADER);
+        let expose = header(EXPOSE_HEADER);
+        let share = header(SHARE_HEADER).as_deref() == Some("1");
         let key = header(header::SEC_WEBSOCKET_KEY.as_str());
         let status = if authorization.as_deref() != Some(&format!("Bearer {SESSION}")) {
             401
-        } else if project.is_none() || key.is_none() {
+        } else if let Some(refuse) = self.options.refuse {
+            refuse
+        } else if expose.is_none() || key.is_none() {
             400
         } else {
             101
@@ -489,10 +508,20 @@ impl FakeTunnel {
             fields: Vec::new(),
             parts: Vec::new(),
             filenames: Vec::new(),
-            project: project.clone(),
+            expose: expose.clone(),
+            share,
             status,
         });
-        let (Some(project), Some(key), 101) = (project, key, status) else {
+        if self.options.refuse.is_some() {
+            return Response::builder()
+                .status(status)
+                .header(header::CONTENT_TYPE, "application/problem+json")
+                .body(Body::from(format!(
+                    r#"{{"title":"Conflict","status":{status},"detail":"{REFUSAL}"}}"#
+                )))
+                .unwrap();
+        }
+        let (Some(port), Some(key), 101) = (expose, key, status) else {
             return Response::builder()
                 .status(status)
                 .body(Body::empty())
@@ -501,14 +530,8 @@ impl FakeTunnel {
         let environment = self
             .options
             .environment
-            .map_or_else(|| format!("{project}-dev"), str::to_owned);
-        let visibility = format!("/api/v1/projects/{project}/environments/{environment}/");
-        let shared_env = lock(&shared.seen)
-            .iter()
-            .filter(|seen| seen.method == "POST" && (200..300).contains(&seen.status))
-            .filter_map(|seen| seen.path.strip_prefix(&visibility))
-            .next_back()
-            == Some("share");
+            .map_or_else(|| port.clone(), str::to_owned);
+        let address = format!("https://{environment}.{ZONE}");
         let on_upgrade = hyper::upgrade::on(&mut request);
         drop(tokio::spawn(
             Arc::clone(self).serve(on_upgrade, environment),
@@ -520,8 +543,9 @@ impl FakeTunnel {
             .header(
                 header::SEC_WEBSOCKET_ACCEPT,
                 derive_accept_key(key.as_bytes()),
-            );
-        if !shared_env {
+            )
+            .header("x-liftoff-address", address);
+        if !share {
             answer = answer.header("x-liftoff-login-url", LOGIN_URL);
         }
         answer.body(Body::empty()).unwrap()

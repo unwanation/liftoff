@@ -95,7 +95,7 @@ pub fn app_router<P: Ports>(state: AppState, services: Services<P>, config: &Res
         .route("/auth/token", post(auth::exchange::<P>))
         .route("/auth/links/{token}", get(login::open_link::<P>))
         .layer(short_timeout(config));
-    // The tunnel of `lof dev`: the route checks
+    // The tunnel of `lof expose`: the route checks
     // its `cli` session itself (a deploy token or another session is
     // `403`, final for the client); the connection outlives the request.
     let tunnel = Router::new()

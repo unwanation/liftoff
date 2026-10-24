@@ -19,8 +19,7 @@
 //! - [`manifest`] – `liftoff.toml`, the project manifest.
 //! - [`detect`]  – stack detection: the manifest proposed for a
 //!   repository without one.
-//! - [`dev`]     – `lof dev` run locally: the free port and the `--port`
-//!   flag.
+//! - [`expose`]  – `lof expose`: the name a local port is reached by.
 //! - [`snippet`] – the CI workflow that deploys a project, per forge.
 //! - [`module`] – module manifests and the `core-call` bridge.
 //! - `fakes`     – hand-written fakes of every port (feature
@@ -33,9 +32,9 @@
 pub mod compose;
 pub mod crypto;
 pub mod detect;
-pub mod dev;
 pub mod domain;
 pub mod error;
+pub mod expose;
 #[cfg(any(test, feature = "test-support"))]
 pub mod fakes;
 pub mod manifest;

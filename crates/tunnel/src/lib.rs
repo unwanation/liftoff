@@ -1,11 +1,11 @@
-//! The tunnel of `lof dev`.
+//! The tunnel of `lof expose`.
 //!
 //! The CLI opens `GET /api/v1/tunnel` as a WebSocket; inside it runs a
 //! `yamux` session in which the **server** opens the streams: one per HTTP
 //! request that reaches the environment's dev address, an application's
 //! WebSocket upgrade included. The server writes the request into its
 //! stream as HTTP/1.1, the client connects the stream to
-//! `127.0.0.1:<port>` and relays the bytes both ways.
+//! `127.0.0.1:<port>` (else `[::1]:<port>`) and relays the bytes both ways.
 //!
 //! - [`server::TunnelServer`] is the daemon's side: [`serve`] runs one
 //!   upgraded connection of an environment (a second one of the same
@@ -53,11 +53,11 @@ pub const PROTOCOL_VERSION: u32 = 1;
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Frame {
     /// The handshake. The server sends it first with the environment it
-    /// found or created for the project (step 2); the client
+    /// found or created for the port (step 2); the client
     /// answers with the same environment and its own version. Only after
     /// both is the connection the environment's tunnel.
     Hello {
-        /// The environment the tunnel serves (`<project>-dev`).
+        /// The environment the tunnel serves (`3000`, `alice-3f9a1c2b`).
         environment: String,
         /// [`PROTOCOL_VERSION`] of the sender.
         version: u32,
@@ -80,16 +80,19 @@ pub enum TunnelError {
     /// The peer broke the protocol (an unexpected frame, another version).
     #[error("tunnel protocol violated: {0}")]
     Protocol(String),
-    /// The daemon refused the upgrade with `401` or `403`: the session is
-    /// missing, expired or not allowed to open a tunnel. Retrying does not
-    /// help.
+    /// The daemon refused the upgrade with a `4xx` other than `408` and
+    /// `429`: the session is missing, expired or not allowed to open a
+    /// tunnel, or the request cannot be served (a port another user
+    /// exposes). Retrying does not help.
     #[error("the daemon refused the tunnel: {status}")]
     Refused {
         /// The status of the daemon's answer.
         status: http::StatusCode,
+        /// The body of the answer, as text, if it had one.
+        detail: Option<String>,
     },
     /// The [`ClientConfig`] cannot work (a URL that is no `ws://` or
-    /// `wss://` URL with a host, a token or project that is no header
+    /// `wss://` URL with a host, a token that is no header
     /// value).
     #[error("invalid tunnel configuration: {0}")]
     Invalid(String),

@@ -67,7 +67,7 @@ const HOST: &str = "api.apps.test";
 /// The address of the function `idle` of `shop`, which does not run.
 const IDLE_HOST: &str = "idle.apps.test";
 
-/// The address of the tunnel `dev` of `shop`, whose `lof dev` is not
+/// The address of the tunnel `dev` of `shop`, whose `lof expose` is not
 /// connected.
 const TUNNEL_HOST: &str = "dev.apps.test";
 
@@ -1059,7 +1059,7 @@ mod pages_taken {
         );
     }
 
-    // TC: WEB-03 (a tunnel without its `lof dev`: the panel's offline
+    // TC: WEB-03 (a tunnel without its `lof expose`: the panel's offline
     // page)
     #[tokio::test]
     async fn redirects_offline_tunnel_to_panel_when_take_pages() {

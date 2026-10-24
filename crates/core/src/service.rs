@@ -89,7 +89,7 @@ pub use templates::{
     TEMPLATE_CACHE_TTL, TemplateCatalog,
 };
 pub use tenancy::{TenancyService, TenantOf};
-pub use tunnels::{OpenedTunnel, TunnelEnd, TunnelsService};
+pub use tunnels::{Exposure, OpenedTunnel, TunnelEnd, TunnelsService, is_exposures};
 pub use visibility::{Access, AccessDecision, AccessRequest, VisibilityService};
 pub use web_panel::{
     PanelOrigin, SameSite, WEB_MODULE, WebPanelService, browser_session_cookie, with_same_site,

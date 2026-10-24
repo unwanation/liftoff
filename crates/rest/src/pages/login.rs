@@ -12,7 +12,7 @@ use super::{document, escape};
 /// `host` is given when the browser came from one, to return to `rd`
 /// there. The page is a form that sends the pasted
 /// one-time link to `GET /login?link=…&host=…&rd=…`, and the text to run
-/// `lof dev` or `lof artifact open` for a link. `host` and `rd` are
+/// `lof expose` or `lof artifact open` for a link. `host` and `rd` are
 /// escaped.
 #[must_use]
 pub fn login(host: Option<&Host>, rd: &ReturnPath, notice: Option<&str>) -> String {
@@ -47,7 +47,7 @@ pub fn login(host: Option<&Host>, rd: &ReturnPath, notice: Option<&str>) -> Stri
     );
     body.push_str(
         "<button type=\"submit\">Sign in</button>\n</form>\n\
-         <p>No link? <code>lof dev</code> prints one for its dev address, \
+         <p>No link? <code>lof expose</code> prints one for its address, \
          <code>lof artifact open &lt;id&gt;</code> opens one for an artifact. \
          A link works once, within ten minutes.</p>\n",
     );

@@ -6,8 +6,8 @@
 //!
 //! - [`login`]: the login page of the API host without a module that
 //!   replaces it (`render_page(login)`): a field to paste the one-time
-//!   link and the text to run `lof dev` or `lof artifact open`;
-//! - [`offline`]: a tunnel whose `lof dev` is not connected (`503`);
+//!   link and the text to run `lof expose` or `lof artifact open`;
+//! - [`offline`]: a tunnel whose `lof expose` is not connected (`503`);
 //! - [`artifact`]: the wrapper of an artifact's version, with its own stylesheet and [`ARTIFACT_CSP`];
 //! - [`forbidden`]: a session of someone who may not open the address
 //!   (`403`).

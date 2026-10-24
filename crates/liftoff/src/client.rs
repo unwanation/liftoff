@@ -92,23 +92,6 @@ impl Client {
             .await
     }
 
-    /// `GET path`, whatever status it answers: the status and the body,
-    /// for a caller that acts on one refusal itself (`lof dev --share`
-    /// asks whether its tunnel exists). Only a network failure or Ctrl-C
-    /// is an error; [`refusal`] turns an answer into one.
-    pub(crate) async fn get_any(&self, path: &str) -> Result<(StatusCode, String), CliError> {
-        self.any(self.request(Method::GET, path, &[])).await
-    }
-
-    /// `POST path` with no body, whatever status it answers: the status
-    /// and the body, for a caller that acts on one refusal itself
-    /// (`lof dev --share` before its tunnel exists). Only a network
-    /// failure or Ctrl-C is an error; [`refusal`] turns an answer into
-    /// one.
-    pub(crate) async fn post_any(&self, path: &str) -> Result<(StatusCode, String), CliError> {
-        self.any(self.request(Method::POST, path, &[])).await
-    }
-
     /// `method path` with a JSON body, whatever status it answers: the
     /// status and the body, for a caller that tells `2xx` answers apart
     /// or falls back on one (the `oidc` device flow). Only a network

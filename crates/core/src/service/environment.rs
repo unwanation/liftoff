@@ -299,7 +299,7 @@ impl<P: Ports> EnvironmentService<P> {
         if kind == EnvKind::Tunnel {
             return Err(Error::invalid(
                 "kind",
-                "a tunnel environment is created by `lof dev` (GET /tunnel), not added",
+                "a tunnel environment is created by `lof expose` (GET /tunnel), not added",
             ));
         }
         if store

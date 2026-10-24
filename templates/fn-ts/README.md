@@ -19,17 +19,17 @@ imports.
 
 ## Develop
 
-Needs [Bun](https://bun.sh) and the [wasmtime](https://wasmtime.dev) CLI
-for `lof dev`.
+Needs [Bun](https://bun.sh) and the [wasmtime](https://wasmtime.dev) CLI.
 
 ```sh
-lof dev              # build, then serve on http://localhost:<PORT>
-bun run build        # build dist/fn.wasm only
+bun install && bun run build && wasmtime serve -Scli -Sconfig -Skeyvalue --addr 127.0.0.1:8080 dist/fn.wasm
+lof expose 8080      # a private address for it on the network, through the server
+lof secret pull --write   # the environment's secrets in .env.prod
 ```
 
-`lof dev` runs the `[dev] command` of `liftoff.toml` with `PORT` and the
-project's secrets in its environment. The command passes no `wasi:config`
-values to `wasmtime serve` (they would go on its command line, where
+The first line is the `[dev] command` of `liftoff.toml` on port 8080:
+it builds the component and serves it on `http://localhost:8080`. It
+passes no `wasi:config` values to `wasmtime serve` (they would go on its command line, where
 `ps` shows them), so `GET /` answers the default greeting locally. Under `wasmtime serve` the
 key-value store lives in memory and starts empty for every request, so
 `visits` stays `1` there; on liftoff it is the environment's store and

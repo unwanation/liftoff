@@ -25,7 +25,7 @@ pub(super) async fn run<S: Sleeper>(
 }
 
 /// Shows the environment and, without `--json`, the state of each
-/// tunnel of the project (`lof dev`'s).
+/// tunnel of the project.
 pub(super) async fn status<S: Sleeper>(ctx: &mut Ctx<'_, S>) -> Result<(), CliError> {
     let client = ctx.client()?;
     let project = ctx.want_project()?;

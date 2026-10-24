@@ -1,6 +1,6 @@
 //! The CLI's side of the tunnel.
 
-use core::net::Ipv4Addr;
+use core::net::{Ipv4Addr, Ipv6Addr};
 use core::time::Duration;
 use std::sync::Arc;
 
@@ -73,11 +73,12 @@ pub struct ClientConfig {
     pub url: String,
     /// The CLI session, sent as `Authorization: Bearer`.
     pub token: String,
-    /// The project, sent as `X-Liftoff-Project`: the daemon finds or
-    /// creates its tunnel environment (step 2).
-    pub project: String,
-    /// The port of the developer's app on `127.0.0.1`.
+    /// The port of the developer's app on `127.0.0.1` (or `[::1]`), sent
+    /// as `X-Liftoff-Expose`: the daemon finds or creates its tunnel
+    /// (step 2).
     pub local_port: u16,
+    /// Sent as `X-Liftoff-Share: 1`: the tunnel is open to everyone.
+    pub share: bool,
     /// How often the client pings an idle connection.
     pub keepalive: Duration,
     /// The waits between attempts to connect.
@@ -92,8 +93,8 @@ impl core::fmt::Debug for ClientConfig {
         f.debug_struct("ClientConfig")
             .field("url", &self.url)
             .field("token", &"<redacted>")
-            .field("project", &self.project)
             .field("local_port", &self.local_port)
+            .field("share", &self.share)
             .field("keepalive", &self.keepalive)
             .field("backoff", &self.backoff)
             .field("extra_roots", &self.extra_roots.len())
@@ -102,15 +103,15 @@ impl core::fmt::Debug for ClientConfig {
 }
 
 impl ClientConfig {
-    /// A configuration with the default keepalive (15 seconds) and
-    /// [`Backoff::default`].
+    /// A configuration of a private tunnel with the default keepalive
+    /// (15 seconds) and [`Backoff::default`].
     #[must_use]
-    pub fn new(url: String, token: String, project: String, local_port: u16) -> Self {
+    pub fn new(url: String, token: String, local_port: u16) -> Self {
         Self {
             url,
             token,
-            project,
             local_port,
+            share: false,
             keepalive: Duration::from_secs(15),
             backoff: Backoff::default(),
             extra_roots: Vec::new(),
@@ -128,8 +129,8 @@ struct Target {
     /// certificate must carry.
     tls: Option<(Arc<rustls::ClientConfig>, ServerName<'static>)>,
     bearer: HeaderValue,
-    project: HeaderValue,
     local_port: u16,
+    share: bool,
     keepalive: Duration,
     backoff: Backoff,
 }
@@ -164,16 +165,14 @@ impl Target {
         let mut bearer = HeaderValue::try_from(format!("Bearer {}", config.token))
             .map_err(|_bad| invalid("the session is no header value"))?;
         bearer.set_sensitive(true);
-        let project = HeaderValue::try_from(config.project)
-            .map_err(|_bad| invalid("the project is no header value"))?;
         Ok(Self {
             uri,
             host,
             port,
             tls,
             bearer,
-            project,
             local_port: config.local_port,
+            share: config.share,
             keepalive: config.keepalive,
             backoff: config.backoff,
         })
@@ -210,6 +209,9 @@ pub enum ClientState {
     Connected {
         /// The environment the server named in its `Hello`.
         environment: String,
+        /// `X-Liftoff-Address` of the upgrade: the tunnel's `https://`
+        /// address.
+        address: Option<String>,
         /// `X-Liftoff-Login-Url` of the upgrade: the one-time link that
         /// logs a browser in to a private environment (DEVT-07); `None`
         /// for a shared one.
@@ -218,11 +220,15 @@ pub enum ClientState {
     /// A newer connection of the same environment replaced this one; the
     /// client stopped and does not reconnect.
     Evicted,
-    /// The daemon refused the session (`401`: missing or expired, `403`:
-    /// not allowed); the client stopped and does not reconnect.
+    /// The daemon refused the upgrade for good (`401`: the session is
+    /// missing or expired, `403`: not allowed, any other `4xx` but `408`
+    /// and `429`: the request itself, a port another user exposes); the
+    /// client stopped and does not reconnect.
     Refused {
         /// The status of the daemon's answer.
         status: StatusCode,
+        /// The body of the answer, as text, if it had one.
+        detail: Option<String>,
     },
     /// [`TunnelClient::shutdown`] ended it.
     Stopped,
@@ -268,7 +274,7 @@ impl TunnelClient {
     }
 
     /// Sends [`Frame::Shutdown`], closes the
-    /// connection and stops reconnecting (Ctrl-C of `lof dev`).
+    /// connection and stops reconnecting (Ctrl-C of `lof expose`).
     pub async fn shutdown(mut self) {
         self.stop.send_replace(true);
         if let Some(mut task) = self.task.take()
@@ -301,13 +307,13 @@ async fn run(target: Target, state: watch::Sender<ClientState>, mut stop: watch:
             // The caller tells the person from the state; the log is for
             // the record only.
             Outcome::Evicted => {
-                tracing::info!("another `lof dev` of this project took over the tunnel");
+                tracing::info!("another `lof expose` of this port took over the tunnel");
                 state.send_replace(ClientState::Evicted);
                 return;
             }
-            Outcome::Failed(TunnelError::Refused { status }) => {
-                tracing::info!(%status, "the daemon refused the tunnel; log in again");
-                state.send_replace(ClientState::Refused { status });
+            Outcome::Failed(TunnelError::Refused { status, detail }) => {
+                tracing::info!(%status, "the daemon refused the tunnel");
+                state.send_replace(ClientState::Refused { status, detail });
                 return;
             }
             Outcome::Lost => {
@@ -343,7 +349,7 @@ async fn session(
     stop: &mut watch::Receiver<bool>,
 ) -> Outcome {
     let connecting = tokio::time::timeout(CONNECT_TIMEOUT, handshake(config));
-    let (sink, mut source, environment, login_url) = tokio::select! {
+    let (sink, mut source, environment, address, login_url) = tokio::select! {
         // A handshake that ended in the same wake-up as the stop is the
         // tunnel: it ends below with `Shutdown`, which the server, having
         // taken the client's `Hello`, waits for.
@@ -357,6 +363,7 @@ async fn session(
     };
     state.send_replace(ClientState::Connected {
         environment,
+        address,
         login_url,
     });
 
@@ -427,13 +434,20 @@ type Connected = (
     Source<Box<dyn Io>>,
     String,
     Option<String>,
+    Option<String>,
 );
 
 /// The header of the upgrade's answer that carries the login link.
 const LOGIN_URL_HEADER: &str = "x-liftoff-login-url";
 
-/// Connects, upgrades with the session and the project, and answers the
-/// server's `Hello`.
+/// The header of the upgrade's answer that carries the tunnel's address.
+const ADDRESS_HEADER: &str = "x-liftoff-address";
+
+/// The longest body of a refusal [`ClientState::Refused`] keeps.
+const DETAIL_MAX: usize = 1024;
+
+/// Connects, upgrades with the session, the port and `--share`, and
+/// answers the server's `Hello`.
 async fn handshake(config: &Target) -> Result<Connected, TunnelError> {
     let connection = |error: &dyn core::fmt::Display| TunnelError::Connection(error.to_string());
     let mut request = config
@@ -443,7 +457,10 @@ async fn handshake(config: &Target) -> Result<Connected, TunnelError> {
         .map_err(|e| connection(&e))?;
     let headers = request.headers_mut();
     headers.insert(http::header::AUTHORIZATION, config.bearer.clone());
-    headers.insert("x-liftoff-project", config.project.clone());
+    headers.insert("x-liftoff-expose", HeaderValue::from(config.local_port));
+    if config.share {
+        headers.insert("x-liftoff-share", HeaderValue::from_static("1"));
+    }
 
     let tcp = TcpStream::connect((config.host.as_str(), config.port))
         .await
@@ -457,24 +474,29 @@ async fn handshake(config: &Target) -> Result<Connected, TunnelError> {
             .await;
     let (socket, response): (WebSocketStream<Box<dyn Io>>, _) = match upgraded {
         Ok(upgraded) => upgraded,
-        Err(WsError::Http(response))
-            if matches!(
-                response.status(),
-                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
-            ) =>
-        {
+        Err(WsError::Http(response)) if is_final(response.status()) => {
+            let detail = response
+                .body()
+                .as_deref()
+                .map(|body| String::from_utf8_lossy(body).trim().to_owned())
+                .filter(|body| !body.is_empty())
+                .map(|body| body.chars().take(DETAIL_MAX).collect());
             return Err(TunnelError::Refused {
                 status: response.status(),
+                detail,
             });
         }
         Err(error) => return Err(connection(&error)),
     };
 
-    let login_url = response
-        .headers()
-        .get(LOGIN_URL_HEADER)
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_owned);
+    let header = |name: &str| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned)
+    };
+    let (address, login_url) = (header(ADDRESS_HEADER), header(LOGIN_URL_HEADER));
     let (mut sink, mut source) = socket.split();
     let hello = link::next_frame(&mut source).await?;
     let environment = match hello {
@@ -498,7 +520,16 @@ async fn handshake(config: &Target) -> Result<Connected, TunnelError> {
     sink.send(link::text(&answer))
         .await
         .map_err(|e| connection(&e))?;
-    Ok((sink, source, environment, login_url))
+    Ok((sink, source, environment, address, login_url))
+}
+
+/// Whether the daemon's `status` refuses the upgrade for good: a `4xx`
+/// other than a timeout (`408`) or too many requests (`429`), which a
+/// later attempt may pass.
+fn is_final(status: StatusCode) -> bool {
+    status.is_client_error()
+        && status != StatusCode::REQUEST_TIMEOUT
+        && status != StatusCode::TOO_MANY_REQUESTS
 }
 
 /// TLS over `tcp` to `host` with the client's TLS configuration.
@@ -514,10 +545,18 @@ async fn secure(
         .map_err(|e| connection(&e))
 }
 
-/// Connects one stream of the server to the local port and relays the
-/// bytes both ways; answers `502` itself when the port refuses.
+/// Connects one stream of the server to the local port, on `127.0.0.1`
+/// and else on `[::1]` (a dev server on `localhost` may listen on IPv6
+/// only), and relays the bytes both ways; answers `502` itself when the
+/// port refuses on both.
 async fn relay(mut stream: MuxStream, port: u16) {
-    match TcpStream::connect((Ipv4Addr::LOCALHOST, port)).await {
+    let local = match TcpStream::connect((Ipv4Addr::LOCALHOST, port)).await {
+        Ok(local) => Ok(local),
+        Err(v4) => TcpStream::connect((Ipv6Addr::LOCALHOST, port))
+            .await
+            .map_err(|_v6| v4),
+    };
+    match local {
         Ok(mut local) => {
             if let Err(error) = tokio::io::copy_bidirectional(&mut stream, &mut local).await {
                 tracing::debug!(%error, "a tunnel stream ended with an error");

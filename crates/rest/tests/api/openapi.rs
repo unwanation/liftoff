@@ -553,7 +553,7 @@ mod operation_table {
     }
 
     /// The path of every `.route("...", ...)` in the router's source.
-    /// The WebSocket upgrade of `lof dev`.
+    /// The WebSocket upgrade of `lof expose`.
     const TUNNEL_UPGRADE: &str = "/tunnel";
 
     /// The page a one-time link opens in a browser: a redirect with a cookie, no JSON operation.
@@ -574,7 +574,7 @@ mod operation_table {
     // TC: MCP-01 (every route the router serves below `/api/v1` is a row of
     // the table, so it is a tool too; the routes of modules below `/m/`
     // are the modules' own, `GET /tunnel` is the WebSocket upgrade of
-    // `lof dev` and `GET /auth/links/{token}` the browser's page of a
+    // `lof expose` and `GET /auth/links/{token}` the browser's page of a
     // one-time link, no JSON operations a tool could call)
     #[tokio::test]
     async fn every_routed_operation_in_table_when_router_serves_it() {

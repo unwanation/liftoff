@@ -2,7 +2,7 @@
 //!
 //! - [`VisibilityService::share`] and [`VisibilityService::unshare`]
 //!   (`POST /projects/{p}/environments/{e}/share|unshare`, `lof env
-//!   share|unshare`, `lof dev --share`) turn an environment `shared` or
+//!   share|unshare`) turn an environment `shared` or
 //!   back `private`; only its owner (a tunnel's `owner_user_id`) or an
 //!   admin may, and the `authorize` hook is asked once (VIS-01, VIS-06);
 //! - [`Access::check`] is what the function and tunnel listeners ask

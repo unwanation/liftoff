@@ -1,6 +1,6 @@
 [package]
 name = "liftoff-tunnel"
-description = "The tunnel of lof dev: its protocol, the multiplexer and both sides of the connection."
+description = "The tunnel of lof expose: its protocol, the multiplexer and both sides of the connection."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

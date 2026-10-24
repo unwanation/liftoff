@@ -1,7 +1,7 @@
 //! The tunnel listener on `[tunnel] bind`.
 //!
-//! Caddy sends it every request for the dev address of a running tunnel
-//! environment, `Host` unchanged. The listener:
+//! Caddy sends it every request for the address of a running tunnel of
+//! `lof expose`, `Host` unchanged. The listener:
 //!
 //! - takes connections from loopback only (the peer is checked);
 //! - finds the environment by `Host` → domain → binding → tunnel
@@ -15,7 +15,9 @@
 //!   liftoff's cookies, a liftoff bearer, the browser's `X-Forwarded-*`
 //!   and `X-Liftoff-*` (it sets its own `X-Forwarded-For`, `-Proto`,
 //!   `-Host`, and `X-Liftoff-User`, `-Email` of the person it let
-//!   through), and answers `503 dev offline` when no client is connected
+//!   through), with `Host: localhost` (a dev server refuses hosts it does
+//!   not know: Vite's `allowedHosts`, webpack-dev-server's host check;
+//!   the address is in `X-Forwarded-Host`), and answers `503 dev offline` when no client is connected
 //!   or the environment is `offline` (for the latter, the daemon's
 //!   offline page of or a module's `render_page`);
 //! - a path under `/.liftoff/` is liftoff's on every address, never
@@ -273,7 +275,8 @@ fn own(reply: Response<Full<bytes::Bytes>>) -> Response<ResponseBody> {
 /// sent as `X-Forwarded-*` or `Forwarded` is dropped, `X-Forwarded-For` is
 /// the client Caddy reported ([`client_of`]), `X-Forwarded-Proto` is
 /// `https` (a dev address is served over TLS only) and
-/// `X-Forwarded-Host` is the dev address.
+/// `X-Forwarded-Host` is the dev address; `Host` is `localhost`, the
+/// host a dev server accepts without being told (EXP-08).
 fn forwarded_headers(headers: &mut HeaderMap, host: &Host, peer: SocketAddr, user: Option<&User>) {
     let client = client_of(headers, peer);
     for name in &HOP_BY_HOP {
@@ -295,7 +298,11 @@ fn forwarded_headers(headers: &mut HeaderMap, host: &Host, peer: SocketAddr, use
     if let Ok(host) = HeaderValue::try_from(host.as_str()) {
         let _previous = headers.insert(FORWARDED_HOST, host);
     }
+    let _previous = headers.insert(header::HOST, HeaderValue::from_static(LOCAL_HOST));
 }
+
+/// The `Host` the developer's app is asked with.
+const LOCAL_HOST: &str = "localhost";
 
 /// The client of the request: the last address of `X-Forwarded-For`,
 /// which the local Caddy (the only peer the listener serves, and one that
@@ -376,6 +383,7 @@ mod tests {
             assert_eq!(
                 pairs,
                 vec![
+                    ("host".to_owned(), "localhost".to_owned()),
                     ("x-forwarded-for".to_owned(), "198.51.100.4".to_owned()),
                     (
                         "x-forwarded-host".to_owned(),
@@ -394,7 +402,7 @@ mod tests {
                 pairs
                     .iter()
                     .map(|(name, _)| name.as_str())
-                    .filter(|name| !name.starts_with(FORWARDED_PREFIX))
+                    .filter(|name| !name.starts_with(FORWARDED_PREFIX) && *name != "host")
                     .collect::<Vec<_>>(),
                 vec!["x-custom"]
             );
@@ -410,7 +418,7 @@ mod tests {
             assert_eq!(
                 pairs
                     .into_iter()
-                    .filter(|(name, _)| !name.starts_with(FORWARDED_PREFIX))
+                    .filter(|(name, _)| !name.starts_with(FORWARDED_PREFIX) && name != "host")
                     .collect::<Vec<_>>(),
                 vec![("cookie".to_owned(), "app=1".to_owned())]
             );
@@ -422,6 +430,21 @@ mod tests {
             let pairs = forwarded(&[]);
             assert!(
                 pairs.contains(&("x-forwarded-for".to_owned(), "127.0.0.1".to_owned())),
+                "{pairs:?}"
+            );
+        }
+
+        // TC: EXP-08 (the app is asked for `localhost`, the address is in
+        // `X-Forwarded-Host`)
+        #[test]
+        fn localhost_host_when_browser_asked_for_address() {
+            let pairs = forwarded(&[("host", "shop-dev.apps.test")]);
+            assert!(
+                pairs.contains(&("host".to_owned(), "localhost".to_owned()))
+                    && pairs.contains(&(
+                        "x-forwarded-host".to_owned(),
+                        "shop-dev.apps.test".to_owned()
+                    )),
                 "{pairs:?}"
             );
         }

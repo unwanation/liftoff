@@ -13,7 +13,7 @@ pub struct EnvironmentCreate {
     /// The branch CI deploys from; pinned by the caller.
     pub branch: String,
     /// `compose` (the default) or `function`; `tunnel` is refused
-    /// (`400` on `kind`): `lof dev` creates tunnels through `GET /tunnel`.
+    /// (`400` on `kind`): `lof expose` creates tunnels through `GET /tunnel`.
     #[serde(default)]
     pub kind: Option<String>,
 }
@@ -60,8 +60,7 @@ pub struct EnvironmentView {
     pub branch: Option<String>,
     /// ULID of who pinned it.
     pub pinned_by: Option<String>,
-    /// ULID of the user whose tunnel it is (`tunnel` only): `lof dev
-    /// --share` shares only its caller's own tunnel before the upgrade.
+    /// ULID of the user whose tunnel it is (`tunnel` only).
     #[serde(default)]
     pub owner: Option<String>,
     /// `empty`, `running`, `failed`, `stopped` or `offline`.

@@ -1,5 +1,6 @@
 //! TC: CLIX-07. `secret pull` prints the `.env` of the environment in the
-//! order `GET /secrets/resolve` returns. `secret sync`
+//! order `GET /secrets/resolve` returns, and `--write` writes it into
+//! `.env.<env>`. `secret sync`
 //! sends the project's `ci = true` secrets to its forge through
 //! `POST /secrets/sync` (SYNC).
 
@@ -77,6 +78,81 @@ mod pull {
     async fn writes_nothing_else_to_stdout() {
         let (outcome, _stub) = pull(r#"{"vars":[{"key":"A","value":"1"}]}"#).await;
         assert_eq!(outcome.out, "A=1\n");
+    }
+}
+
+mod pull_write {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    use super::*;
+
+    /// `secret pull --write` against a server answering `body`.
+    async fn pull_write(body: &str) -> (crate::support::Outcome, Cli) {
+        let stub = Stub::start()
+            .await
+            .route("GET", RESOLVE, vec![json(200, body)]);
+        let cli = Cli::logged_in(&stub.url);
+        let outcome = cli
+            .run(&["--project", "liftoff", "secret", "pull", "--write"])
+            .await;
+        (outcome, cli)
+    }
+
+    // TC: CLIX-07 (`--write`: the `.env` of the environment in `.env.<env>`)
+    #[tokio::test]
+    async fn writes_env_file_of_environment_when_write() {
+        let (outcome, cli) = pull_write(crate::fixtures::RESOLVED_ENV).await;
+        let written = std::fs::read_to_string(cli.root.join(".env.prod")).unwrap_or_default();
+        assert_eq!(
+            (outcome.code, written.as_str()),
+            (
+                0,
+                "ZETA=last-alphabetically\nALPHA=1\nLIFTOFF_PROJECT=liftoff\nLIFTOFF_ENV=prod\n"
+            ),
+            "{outcome:?}"
+        );
+    }
+
+    // TC: CLIX-07 (secrets: readable by the owner only)
+    #[tokio::test]
+    async fn owner_only_file_when_write() {
+        let (_outcome, cli) = pull_write(crate::fixtures::RESOLVED_ENV).await;
+        let mode = std::fs::metadata(cli.root.join(".env.prod"))
+            .map(|meta| meta.permissions().mode() & 0o777)
+            .ok();
+        assert_eq!(mode, Some(0o600));
+    }
+
+    // TC: CLIX-07 (stdout names the file, never a value)
+    #[tokio::test]
+    async fn prints_path_without_values_when_write() {
+        let (outcome, cli) = pull_write(crate::fixtures::RESOLVED_ENV).await;
+        assert_eq!(
+            outcome.out,
+            format!("{}\n", cli.root.join(".env.prod").display())
+        );
+    }
+
+    // TC: CLIX-07 (a second pull replaces the file whole)
+    #[tokio::test]
+    async fn replaces_env_file_when_written_again() {
+        let stub = Stub::start().await.route(
+            "GET",
+            RESOLVE,
+            vec![
+                json(
+                    200,
+                    r#"{"vars":[{"key":"A","value":"1"},{"key":"B","value":"2"}]}"#,
+                ),
+                json(200, r#"{"vars":[{"key":"A","value":"3"}]}"#),
+            ],
+        );
+        let cli = Cli::logged_in(&stub.url);
+        let words = ["--project", "liftoff", "secret", "pull", "--write"];
+        cli.run(&words).await;
+        cli.run(&words).await;
+        let written = std::fs::read_to_string(cli.root.join(".env.prod")).unwrap_or_default();
+        assert_eq!(written, "A=3\n");
     }
 }
 

@@ -10,12 +10,16 @@ use liftoff_core::service::{check_ci_scope, check_readable, env_scopes, merge_la
 use liftoff_core::system::SystemClock;
 use reqwest::Method;
 
+use std::io::Write as _;
+use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+
 use super::{Ctx, ProjectRef, parse, resolve, segment};
 use crate::args::{Scope, SecretCommand};
 use crate::client::Client;
 use crate::error::CliError;
 use crate::local::{Home, LocalSecretStore, view};
 use crate::mode::Mode;
+use crate::project::work_tree_root;
 use crate::{Sleeper, render};
 
 /// Runs `secret …`.
@@ -60,7 +64,7 @@ pub(super) async fn run<S: Sleeper>(
                 .await?;
             ctx.ack(&reply, &format!("removed {key}"))
         }
-        SecretCommand::Pull => pull(ctx, &client).await,
+        SecretCommand::Pull { write } => pull(ctx, &client, write).await,
         SecretCommand::Push { move_ } => push(ctx, &client, move_).await,
         SecretCommand::Sync => sync(ctx, &client).await,
         SecretCommand::History { key, scope } => {
@@ -193,12 +197,19 @@ async fn set<S: Sleeper>(
 
 /// `pull`: the `.env` the environment runs with, in the order the server
 /// resolves it, and nothing else on stdout.
-async fn pull<S: Sleeper>(ctx: &mut Ctx<'_, S>, client: &Client) -> Result<(), CliError> {
+async fn pull<S: Sleeper>(
+    ctx: &mut Ctx<'_, S>,
+    client: &Client,
+    write: bool,
+) -> Result<(), CliError> {
     let project = ctx.want_project()?;
     ctx.finish()?;
     let project = resolve(client, project).await?;
     let query = [("project", project), ("env", ctx.env_name())];
     let reply = client.get("/secrets/resolve", &query).await?;
+    if write {
+        return write_dotenv(ctx, &parse::<ResolvedEnv>(&reply.body)?);
+    }
     ctx.show(&reply, |body| {
         let env: ResolvedEnv = parse(body)?;
         Ok(env
@@ -373,7 +384,7 @@ fn local<S: Sleeper>(ctx: &mut Ctx<'_, S>, command: SecretCommand) -> Result<(),
                 format!("removed {key}\n")
             })
         }
-        SecretCommand::Pull => local_pull(ctx),
+        SecretCommand::Pull { write } => local_pull(ctx, write),
         SecretCommand::Push { .. } | SecretCommand::Sync => Err(needs_server(&command)),
         SecretCommand::History { key, scope } => {
             let key = ctx.text(key, "K", "Key")?;
@@ -460,10 +471,13 @@ fn local_set<S: Sleeper>(
 
 /// `secret pull` without a server: the local secrets of the environment
 /// as `.env`, merged as the core merges an env (`env_scopes`, `merge_layers`: tenant, then project, then environment, the lower scope winning; the keys for CI only left out).
-fn local_pull<S: Sleeper>(ctx: &mut Ctx<'_, S>) -> Result<(), CliError> {
+fn local_pull<S: Sleeper>(ctx: &mut Ctx<'_, S>, write: bool) -> Result<(), CliError> {
     let project = ctx.want_project()?;
     ctx.finish()?;
     let env = local_resolve(&ctx.home(), &project, &ctx.env_name())?;
+    if write {
+        return write_dotenv(ctx, &env);
+    }
     ctx.say_json_or(&env, |env| {
         env.vars
             .iter()
@@ -472,9 +486,37 @@ fn local_pull<S: Sleeper>(ctx: &mut Ctx<'_, S>) -> Result<(), CliError> {
     })
 }
 
+/// `pull --write`: `env` into `.env.<env>` at the top of the working
+/// tree, replaced whole, readable by its owner only (`0600`, also when it
+/// existed); the path goes to stdout, how many keys to stderr.
+fn write_dotenv<S: Sleeper>(ctx: &mut Ctx<'_, S>, env: &ResolvedEnv) -> Result<(), CliError> {
+    let name = format!(".env.{}", ctx.env_name());
+    let path = work_tree_root(&ctx.env.cwd).join(&name);
+    let text: String = env
+        .vars
+        .iter()
+        .map(|var| render::dotenv_line(&var.key, &var.value))
+        .collect();
+    let cannot = |error: std::io::Error| CliError::Local(format!("cannot write {name}: {error}"));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&path)
+        .map_err(cannot)?;
+    file.set_permissions(std::fs::Permissions::from_mode(0o600))
+        .map_err(cannot)?;
+    file.write_all(text.as_bytes()).map_err(cannot)?;
+    ctx.say(&format!("{}\n", path.display()))?;
+    ctx.tell(&format!(
+        "wrote {} keys to {name}; keep it out of git (`.gitignore`)\n",
+        env.vars.len()
+    ))
+}
+
 /// The environment `env` of `project` runs with in local mode, merged as
-/// the core merges an env (`env_scopes`, `merge_layers`: tenant, then project, then environment, the lower scope winning; the keys for CI only left out): what `secret pull` prints and `lof dev` puts in
-/// the dev command's environment.
+/// the core merges an env (`env_scopes`, `merge_layers`: tenant, then project, then environment, the lower scope winning; the keys for CI only left out): what `secret pull` prints and writes.
 pub(super) fn local_resolve(
     home: &Home,
     project: &ProjectRef,

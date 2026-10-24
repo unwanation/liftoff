@@ -524,7 +524,7 @@ mod page {
                 reply.status,
                 is_html(&reply),
                 body.contains("name=\"link\""),
-                body.contains("lof dev"),
+                body.contains("lof expose"),
                 body.contains("lof artifact open"),
             ),
             (StatusCode::OK, true, true, true, true),

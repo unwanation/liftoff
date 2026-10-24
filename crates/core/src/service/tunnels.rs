@@ -1,14 +1,18 @@
-//! [`TunnelsService`]: the tunnel environments of `lof dev`.
+//! [`TunnelsService`]: the tunnels of `lof expose`.
 //!
-//! - [`TunnelsService::open`] (`GET /api/v1/tunnel` with the project in
-//!   `X-Liftoff-Project`): finds or creates the actor's tunnel environment
-//!   of the project, `<project>-dev` in single-user mode and
-//!   `<project>-<login>` with the `tenants` module (DEVT-01, DEVT-02),
-//!   private and owned by the actor, with its managed domain
-//!   `<env>.<base>` (the `domain_created` hook asked) bound to it; for a
-//!   private environment it issues the one-time link the upgrade answers
-//!   in `X-Liftoff-Login-Url` (DEVT-07). A second `open` finds the same
-//!   environment and domain (DEVT-04);
+//! - [`TunnelsService::expose`] (`GET /api/v1/tunnel` with the port in
+//!   `X-Liftoff-Expose`): finds or creates the actor's tunnel of that
+//!   port (EXP-03), private and owned by the actor, with its managed
+//!   domain `<name>.localhost.<base>` (the `domain_created` hook asked)
+//!   bound to it. The name is the port when the client runs on the
+//!   daemon's own machine, else the login and an id of the user and the
+//!   port ([`crate::expose::exposure_name`]). Tunnels belong to no
+//!   project of a user: they live in the installation's own project
+//!   `localhost`, created at the first `expose` and kept out of every
+//!   list (see [`is_exposures`]). `share` makes the tunnel `shared`, its
+//!   absence `private` again; for a private one it issues the one-time
+//!   link the upgrade answers in `X-Liftoff-Login-Url` (DEVT-07). A second
+//!   `expose` finds the same environment and domain (DEVT-04);
 //! - [`TunnelsService::connected`]: the client's handshake ended, the
 //!   environment is `running` and its domain goes to `[tunnel] bind`
 //!   ([`Proxy::apply`](crate::ports::Proxy::apply), DEVT-01, DEVT-03);
@@ -23,22 +27,23 @@
 //!   (DEVT-08).
 
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use super::domain::DomainService;
 use super::links::LinksService;
 use super::settings::Settings;
-use super::support::{apply_proxy, authorized_project};
+use super::support::{EXPOSURES_REPO, apply_proxy, authorize};
 use crate::domain::{
     Binding, BindingId, ContainerPort, DomainKind, EnvKind, EnvName, EnvState, Environment,
-    EnvironmentId, Host, Label, Limits, LinkTarget, ModuleName, Project, ProjectName, ServiceName,
-    Timestamp, User, Visibility,
+    EnvironmentId, Host, Label, Limits, LinkTarget, Project, ProjectId, ProjectName, RepoRef,
+    ServiceName, Timestamp, User, Visibility,
 };
 use crate::error::Error;
-use crate::ports::{Action, Clock as _, Ports, Rng as _, Store as _};
+use crate::expose::{ZONE, exposure_name};
+use crate::ports::{Action, Clock as _, Ports, Resource, Rng as _, Store as _};
 
-/// The module whose presence names tunnels after their user.
-const TENANTS_MODULE: &str = "tenants";
+pub use super::support::is_exposures;
 
 /// The `service` of a tunnel's binding: a tunnel has no compose service;
 /// the binding only ties its dev address to it.
@@ -47,16 +52,30 @@ const TUNNEL_SERVICE: &str = "tunnel";
 /// The `container_port` of a tunnel's binding (see [`TUNNEL_SERVICE`]).
 const TUNNEL_CONTAINER_PORT: u16 = 80;
 
-/// What [`TunnelsService::open`] found or created.
+/// What `lof expose` asks [`TunnelsService::expose`] for, validated at
+/// the boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Exposure {
+    /// The port of the developer's app (`X-Liftoff-Expose`).
+    pub port: ContainerPort,
+    /// The address of the client as the daemon's proxy saw it; `None`
+    /// when the adapter cannot tell. The loopback or the server's
+    /// public IP is the daemon's own machine.
+    pub client: Option<IpAddr>,
+    /// `--share`: open to everyone; without it the tunnel is private.
+    pub share: bool,
+}
+
+/// What [`TunnelsService::expose`] found or created.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenedTunnel {
-    /// The tunnel environment of the actor in the project.
+    /// The actor's tunnel of the port.
     pub environment: Environment,
-    /// Its dev address, `<env>.<base>`.
+    /// Its address, `<name>.localhost.<base>`.
     pub host: Host,
     /// A one-time link of the actor to the environment
     /// (`https://<api>/api/v1/auth/links/<token>`) while it is private,
-    /// for `lof dev` to print; `None` for a shared one.
+    /// for `lof expose` to print; `None` for a shared one.
     pub login_url: Option<String>,
 }
 
@@ -122,24 +141,35 @@ impl<P: Ports> TunnelsService<P> {
         self.settings.tunnel_offline_after
     }
 
-    /// `GET /api/v1/tunnel`: the tunnel environment of `actor` in
-    /// `project`, found or created (see the [module
-    /// documentation](self)). The `authorize` hook is asked once
-    /// ([`Action::TunnelOpen`] about the project).
+    /// `GET /api/v1/tunnel`: the tunnel of `actor` for `exposure`,
+    /// found or created (see the [module documentation](self)). The
+    /// `authorize` hook is asked once ([`Action::TunnelExpose`] about the
+    /// installation: without modules only the admin exposes, the
+    /// `tenants` module lets every user).
     ///
     /// # Errors
     ///
-    /// [`Error::NotFound`] for an unknown project; [`Error::Forbidden`]
-    /// when `authorize` refuses or the domain hook denies;
-    /// [`Error::Conflict`] when the name or the dev address is taken by
-    /// something else than the actor's tunnel; [`Error::Validation`] when
-    /// the name would not be an environment name; whatever the store or
-    /// the proxy report.
-    pub async fn open(&self, actor: &User, project: &ProjectName) -> Result<OpenedTunnel, Error> {
+    /// [`Error::Forbidden`] when `authorize` refuses or the domain hook
+    /// denies; [`Error::Conflict`] when the name or the address is
+    /// another user's (the port of another user on the server itself),
+    /// or a project of a user is named `localhost`; whatever the store
+    /// or the proxy report.
+    pub async fn expose(&self, actor: &User, exposure: Exposure) -> Result<OpenedTunnel, Error> {
         let ports = self.ports.as_ref();
-        let project = authorized_project(ports, actor, Action::TunnelOpen, project).await?;
-        let name = self.tunnel_name(&project, actor).await?;
-        let environment = self.find_or_create(&project, &name, actor).await?;
+        authorize(ports, actor, Action::TunnelExpose, &Resource::Admin).await?;
+        let on_server = exposure.client.is_some_and(|client| self.is_server(client));
+        let raw = exposure_name(
+            actor.login.as_str(),
+            &actor.id.to_string(),
+            exposure.port.get(),
+            on_server,
+        );
+        let name = EnvName::new(&raw).map_err(|_invalid| {
+            Error::invalid("port", format!("{raw} would not be an environment name"))
+        })?;
+        let project = self.exposures_project(actor).await?;
+        let found = self.find_or_create(&project, &name, actor).await?;
+        let environment = self.with_visibility(found, exposure.share).await?;
         let host = self.dev_address(&project, &environment).await?;
         let login_url = match environment.visibility {
             Visibility::Private => Some(
@@ -304,27 +334,87 @@ impl<P: Ports> TunnelsService<P> {
         Ok(expired)
     }
 
-    /// `<project>-dev` in single-user mode, `<project>-<login>` with the
-    /// `tenants` module.
-    async fn tunnel_name(&self, project: &Project, actor: &User) -> Result<EnvName, Error> {
-        let tenants = ModuleName::new(TENANTS_MODULE)?;
-        let with_tenants = self
-            .ports
-            .store()
-            .module(&tenants)
-            .await?
-            .is_some_and(|module| module.enabled);
-        let login = with_tenants.then(|| actor.login.as_str());
-        let raw = crate::dev::tunnel_name(project.name.as_str(), login);
-        EnvName::new(&raw).map_err(|_invalid| {
-            Error::invalid(
-                "project",
-                format!(
-                    "the tunnel {raw} of {} would not be an environment name",
-                    project.name
-                ),
-            )
-        })
+    /// Whether `client` is the daemon's own machine: the loopback (an
+    /// IPv4-mapped one too) or the server's public IP.
+    fn is_server(&self, client: IpAddr) -> bool {
+        let client = match client {
+            IpAddr::V6(v6) => v6.to_ipv4_mapped().map_or(client, IpAddr::V4),
+            IpAddr::V4(_) => client,
+        };
+        client.is_loopback() || client == IpAddr::V4(self.settings.public_ip)
+    }
+
+    /// The installation's own project of exposed ports: the stored one,
+    /// else a new one named `localhost` of the base's `liftoff/localhost`
+    /// (no forge's), created by the admin (`actor` when no admin is
+    /// stored). A project of a user that already took the name is a
+    /// conflict; a concurrent first `expose` that created it first is
+    /// read back.
+    async fn exposures_project(&self, actor: &User) -> Result<Project, Error> {
+        let store = self.ports.store();
+        let base = &self.settings.base;
+        let repo = RepoRef::new(EXPOSURES_REPO)?;
+        if let Some(found) = store.project_by_repo(base, &repo).await? {
+            return Ok(found);
+        }
+        let created_by = if actor.is_admin() {
+            actor.id
+        } else {
+            store
+                .users()
+                .await?
+                .into_iter()
+                .find(User::is_admin)
+                .map_or(actor.id, |admin| admin.id)
+        };
+        let project = Project {
+            id: ProjectId::new(self.ports.rng().ulid()),
+            tenant_id: None,
+            name: ProjectName::new(ZONE)?,
+            git_host: base.clone(),
+            repo: repo.clone(),
+            manifest: None,
+            template: None,
+            created_by,
+            created_at: self.ports.clock().now(),
+        };
+        match store.insert_project(&project).await {
+            Ok(()) => {
+                tracing::info!("created the project of exposed ports");
+                Ok(project)
+            }
+            Err(Error::Conflict(what)) => {
+                store.project_by_repo(base, &repo).await?.ok_or_else(|| {
+                    Error::conflict(format!(
+                        "{what}: a project named {ZONE} takes the name of exposed ports; rename it to use `lof expose`"
+                    ))
+                })
+            }
+            Err(other) => Err(other),
+        }
+    }
+
+    /// `tunnel` shared when `share`, else private, stored when that
+    /// changes it.
+    async fn with_visibility(
+        &self,
+        tunnel: Environment,
+        share: bool,
+    ) -> Result<Environment, Error> {
+        let visibility = if share {
+            Visibility::Shared
+        } else {
+            Visibility::Private
+        };
+        if tunnel.visibility == visibility {
+            return Ok(tunnel);
+        }
+        let changed = Environment {
+            visibility,
+            ..tunnel
+        };
+        self.store_state(&changed).await?;
+        Ok(changed)
     }
 
     /// The tunnel `name` of `actor` in `project`: the stored one, else a
@@ -339,8 +429,8 @@ impl<P: Ports> TunnelsService<P> {
         if let Some(found) = store.environment_by_name(project.id, name).await? {
             if found.kind != EnvKind::Tunnel || found.owner_user_id != Some(actor.id) {
                 return Err(Error::conflict(format!(
-                    "environment {name} of {} exists and is not {}'s tunnel",
-                    project.name, actor.login
+                    "{name} is exposed by another user, not by {}",
+                    actor.login
                 )));
             }
             return Ok(found);
@@ -364,9 +454,9 @@ impl<P: Ports> TunnelsService<P> {
         Ok(environment)
     }
 
-    /// The dev address of `tunnel`: the domain bound to it, else the
-    /// managed domain `<env>.<base>` added (the `domain_created` hook
-    /// asked) and bound.
+    /// The address of `tunnel`: the domain bound to it, else the
+    /// managed domain `<name>.localhost.<base>` added (the
+    /// `domain_created` hook asked) and bound.
     async fn dev_address(&self, project: &Project, tunnel: &Environment) -> Result<Host, Error> {
         let store = self.ports.store();
         if let Some(binding) = store.bindings_of_environment(tunnel.id).await?.first()
@@ -376,7 +466,7 @@ impl<P: Ports> TunnelsService<P> {
         }
         let label = Label::new(tunnel.name.as_str())?;
         let domains = DomainService::new(Arc::clone(&self.ports), Arc::clone(&self.settings));
-        let host = domains.admit_managed(&label).await?;
+        let host = domains.admit_exposed(&label).await?;
         let domain = domains
             .store_and_announce(domains.new_domain(project, host, DomainKind::Managed, None))
             .await?;

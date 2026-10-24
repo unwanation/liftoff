@@ -269,7 +269,18 @@ async fn run(
             .issue(actor, &LinkTarget::Environment(world.prod.id))
             .await
             .map(drop),
-        Action::TunnelOpen => world.tunnels().open(actor, &shop).await.map(drop),
+        Action::TunnelExpose => world
+            .tunnels()
+            .expose(
+                actor,
+                crate::service::Exposure {
+                    port: ContainerPort::new(3000)?,
+                    client: None,
+                    share: false,
+                },
+            )
+            .await
+            .map(drop),
         Action::DomainList => world.domains().list(actor).await.map(drop),
         Action::DomainAddManaged => world
             .domains()
@@ -454,7 +465,8 @@ fn expected_resource(world: &World, action: Action, artifact: Option<ArtifactId>
         | Action::ModuleUpdate
         | Action::ModuleRemove
         | Action::ArtifactPublish
-        | Action::ArtifactList => Resource::Admin,
+        | Action::ArtifactList
+        | Action::TunnelExpose => Resource::Admin,
         Action::ArtifactUpdate
         | Action::ArtifactShare
         | Action::ArtifactUnshare
@@ -469,7 +481,6 @@ fn expected_resource(world: &World, action: Action, artifact: Option<ArtifactId>
         | Action::ProjectResolve
         | Action::EnvironmentList
         | Action::EnvironmentAdd
-        | Action::TunnelOpen
         | Action::DomainAddManaged
         | Action::DomainAddExternal
         | Action::DeployRotateToken
@@ -555,7 +566,7 @@ const fn position(action: Action) -> usize {
         Action::EnvironmentShare => 48,
         Action::EnvironmentUnshare => 49,
         Action::LinkIssue => 50,
-        Action::TunnelOpen => 51,
+        Action::TunnelExpose => 51,
         Action::ArtifactPublish => 52,
         Action::ArtifactUpdate => 53,
         Action::ArtifactShare => 54,

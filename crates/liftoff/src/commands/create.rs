@@ -742,8 +742,8 @@ fn work_tree_manifest<S: Sleeper>(
 /// component typed on a terminal. A repository whose files settle
 /// nothing is a compose project (a function is recognised by its files);
 /// `[dev] command` and
-/// the template group stay unasked (`[dev]` is optional, `lof dev` says
-/// when it needs one; the group is a template's).
+/// the template group stay unasked (`[dev]` is optional and only tells
+/// how the project runs; the group is a template's).
 fn detect<S: Sleeper>(
     ctx: &mut Ctx<'_, S>,
     root: &Path,

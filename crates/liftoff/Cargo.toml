@@ -55,7 +55,7 @@ liftoff-wasm = { workspace = true }
 # The rules of module tables (`store-query`) the daemon's store holds
 # modules to, for the CLI's `modules.db`.
 liftoff-module-sql = { workspace = true }
-# The tunnel of `lof dev`: the
+# The tunnel of `lof expose`: the
 # client side of `GET /tunnel`.
 liftoff-tunnel = { workspace = true }
 # `lof mcp`; it sits on `liftoff-api`, never on
@@ -68,7 +68,7 @@ reqwest = { workspace = true, features = ["rustls", "json", "query", "stream"] }
 # so the binary needs no system SQLite.
 rusqlite = { workspace = true, features = ["bundled"] }
 rusqlite_migration = { workspace = true }
-# `lof dev`: Ctrl-C ends the dev command's
+# `lof deploy`: Ctrl-C ends the `[function] build`'s
 # process group.
 rustix = { workspace = true, features = ["std", "process"] }
 serde = { workspace = true, features = ["derive", "std"] }
@@ -76,7 +76,7 @@ serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
 # The RFC 3339 times of local mode's answers, as the server's.
 time = { workspace = true, features = ["formatting", "std"] }
-# `process`: the dev command of `lof dev`, waited for beside Ctrl-C.
+# `process`: the `[function] build` of `lof deploy`, waited for beside Ctrl-C.
 tokio = { workspace = true, features = ["rt", "macros", "time", "signal", "process"] }
 tokio-util = { workspace = true }
 toml = { workspace = true, features = ["parse", "display"] }

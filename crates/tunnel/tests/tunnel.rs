@@ -17,9 +17,9 @@ use liftoff_tunnel::{
     ServerConfig, TunnelClient, TunnelError,
 };
 use support::{
-    Daemon, ENVIRONMENT, EXCHANGE, LocalApp, PROJECT, TOKEN, bytes_body, closed_port,
-    hello_message, raw_client, send, start, test_ca, tls_front, wait_connected, wait_ended,
-    wait_state, websocket_echo,
+    Daemon, ENVIRONMENT, EXCHANGE, LocalApp, TOKEN, bytes_body, closed_port, hello_message,
+    raw_client, send, start, test_ca, tls_front, wait_connected, wait_ended, wait_state,
+    websocket_echo,
 };
 use tokio_tungstenite::tungstenite::Message;
 
@@ -48,11 +48,11 @@ async fn connected(config: ServerConfig) -> (Daemon, LocalApp, TunnelClient) {
 mod handshake {
     use super::*;
 
-    // TC: TUN-01 (the upgrade the daemon routes names the project, not
-    // the environment)
+    // TC: TUN-01 (the upgrade the daemon routes names the port, not the
+    // environment)
     #[tokio::test]
-    async fn sends_the_session_and_the_project_when_it_connects() {
-        let (daemon, _app, _client) = connected(patient()).await;
+    async fn sends_the_session_and_the_port_when_it_connects() {
+        let (daemon, app, _client) = connected(patient()).await;
 
         let headers = daemon.upgrade_headers();
 
@@ -63,9 +63,36 @@ mod handshake {
                 .and_then(|v| v.to_str().ok()),
             Some(format!("Bearer {TOKEN}").as_str())
         );
+        let port = app.port.to_string();
         assert_eq!(
-            first.get("x-liftoff-project").and_then(|v| v.to_str().ok()),
-            Some(PROJECT)
+            (
+                first.get("x-liftoff-expose").and_then(|v| v.to_str().ok()),
+                first.get("x-liftoff-share")
+            ),
+            (Some(port.as_str()), None)
+        );
+    }
+
+    // TC: EXP-07 (`--share` travels with the upgrade)
+    #[tokio::test]
+    async fn sends_share_when_configured_to_share() {
+        let daemon = Daemon::start(patient()).await;
+        let app = LocalApp::start("app").await;
+        let config = ClientConfig {
+            share: true,
+            ..daemon.client_config(app.port, KEEPALIVE)
+        };
+        let client = start(config);
+        wait_connected(&client).await;
+
+        let headers = daemon.upgrade_headers();
+
+        assert_eq!(
+            headers
+                .first()
+                .and_then(|first| first.get("x-liftoff-share"))
+                .and_then(|v| v.to_str().ok()),
+            Some("1")
         );
     }
 
@@ -80,6 +107,7 @@ mod handshake {
             state,
             ClientState::Connected {
                 environment: ENVIRONMENT.to_owned(),
+                address: None,
                 login_url: None,
             }
         );
@@ -158,8 +186,8 @@ mod hello {
 mod config {
     use super::*;
 
-    fn config(url: &str, token: &str, project: &str) -> ClientConfig {
-        ClientConfig::new(url.to_owned(), token.to_owned(), project.to_owned(), 5173)
+    fn config(url: &str, token: &str) -> ClientConfig {
+        ClientConfig::new(url.to_owned(), token.to_owned(), 5173)
     }
 
     // TC: TUN-01 (validated at the boundary)
@@ -170,7 +198,7 @@ mod config {
             "not a url",
             "ws:///api/v1/tunnel",
         ] {
-            let started = TunnelClient::start(config(url, TOKEN, PROJECT));
+            let started = TunnelClient::start(config(url, TOKEN));
 
             assert!(
                 matches!(started, Err(TunnelError::Invalid(_))),
@@ -182,20 +210,7 @@ mod config {
     // TC: TUN-01 (validated at the boundary)
     #[tokio::test]
     async fn refuses_to_start_when_the_token_is_no_header_value() {
-        let started =
-            TunnelClient::start(config("ws://127.0.0.1:1/api/v1/tunnel", "a\nb", PROJECT));
-
-        assert!(
-            matches!(started, Err(TunnelError::Invalid(_))),
-            "{started:?}"
-        );
-    }
-
-    // TC: TUN-01 (validated at the boundary)
-    #[tokio::test]
-    async fn refuses_to_start_when_the_project_is_no_header_value() {
-        let started =
-            TunnelClient::start(config("ws://127.0.0.1:1/api/v1/tunnel", TOKEN, "shop\r"));
+        let started = TunnelClient::start(config("ws://127.0.0.1:1/api/v1/tunnel", "a\nb"));
 
         assert!(
             matches!(started, Err(TunnelError::Invalid(_))),
@@ -208,18 +223,18 @@ mod config {
     fn hides_the_session_when_the_configuration_is_printed() {
         let printed = format!(
             "{:?}",
-            config("wss://liftoff.example.com/api/v1/tunnel", TOKEN, PROJECT)
+            config("wss://liftoff.example.com/api/v1/tunnel", TOKEN)
         );
 
         assert!(!printed.contains(TOKEN), "{printed}");
-        assert!(printed.contains(PROJECT), "{printed}");
+        assert!(printed.contains("5173"), "{printed}");
     }
 }
 
 mod tls {
     use super::*;
 
-    // TC: TUN-01 (`wss://`, the scheme `lof dev` uses against a daemon)
+    // TC: TUN-01 (`wss://`, the scheme `lof expose` uses against a daemon)
     #[tokio::test]
     async fn serves_requests_when_it_connects_over_tls() {
         let daemon = Daemon::start(patient()).await;
@@ -347,6 +362,23 @@ mod forward {
         let (status, _headers, _body) = daemon.get("/").await;
 
         assert_eq!(status, StatusCode::BAD_GATEWAY);
+    }
+
+    // TC: TUN-09 (a dev server on `localhost` may listen on `[::1]` only)
+    #[tokio::test]
+    async fn reaches_the_app_on_ipv6_loopback_when_ipv4_refuses() {
+        let Some(app) = LocalApp::start_on_ipv6("v6").await else {
+            tracing::info!("no IPv6 loopback on this host: nothing to reach");
+            return;
+        };
+        let daemon = Daemon::start(patient()).await;
+        let client = start(daemon.client_config(app.port, KEEPALIVE));
+        wait_connected(&client).await;
+        daemon.wait_tunnel().await;
+
+        let (status, _headers, _body) = daemon.get("/").await;
+
+        assert_eq!(status, StatusCode::OK);
     }
 
     // TC: TUN-09 (no client at all: the listener's offline answer)
@@ -549,16 +581,24 @@ mod reconnect {
         daemon.wait_upgrades(2).await;
     }
 
-    // TC: TUN-04 (a refusal of the session does not heal by retrying)
+    // TC: TUN-04 (a refusal of the session, or of a port another user
+    // exposes, does not heal by retrying)
     #[tokio::test]
     async fn stops_as_refused_when_the_daemon_refuses_the_session() {
-        for refusal in [StatusCode::UNAUTHORIZED, StatusCode::FORBIDDEN] {
+        for refusal in [
+            StatusCode::UNAUTHORIZED,
+            StatusCode::FORBIDDEN,
+            StatusCode::CONFLICT,
+        ] {
             let daemon = Daemon::refusing_with(patient(), refusal).await;
             let client = start(daemon.client_config(closed_port().await, KEEPALIVE));
 
             let ended = wait_ended(&client).await;
 
-            assert_eq!(ended, ClientState::Refused { status: refusal });
+            assert!(
+                matches!(ended, ClientState::Refused { status, .. } if status == refusal),
+                "{ended:?}"
+            );
             assert_eq!(daemon.attempts(), 1, "{refusal}: no retry");
         }
     }
@@ -797,7 +837,6 @@ mod keepalive {
         let config = ClientConfig::new(
             "wss://liftoff.example.com/api/v1/tunnel".to_owned(),
             TOKEN.to_owned(),
-            PROJECT.to_owned(),
             5173,
         );
 

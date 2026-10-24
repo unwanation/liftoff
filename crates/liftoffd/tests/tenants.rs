@@ -2514,3 +2514,96 @@ mod access {
         );
     }
 }
+
+/// EXP-05 and EXP-08 against the built module: `lof expose` of a member,
+/// whose tunnel lives in no tenant, so the module's `gate` lets only its
+/// owner (and the admin) through.
+mod expose {
+    use super::*;
+    use liftoff_core::domain::{ContainerPort, LinkTarget};
+    use liftoff_core::ports::HookRequest;
+    use liftoff_core::service::{
+        Access, AccessDecision, AccessRequest, Exposure, OpenedTunnel, TunnelsService,
+    };
+
+    /// `user`'s `lof expose 3000` from somewhere else than the server.
+    async fn exposed(fixture: &Fixture, user: &User) -> Result<OpenedTunnel, Error> {
+        TunnelsService::new(
+            Arc::clone(&fixture.ports),
+            Arc::clone(&fixture.world.settings),
+        )
+        .expose(
+            user,
+            Exposure {
+                port: ContainerPort::new(3000).unwrap(),
+                client: Some(core::net::Ipv4Addr::new(198, 51, 100, 7).into()),
+                share: false,
+            },
+        )
+        .await
+    }
+
+    /// What `Access` decides for `user`'s session on `opened`'s address.
+    async fn decided(fixture: &Fixture, user: &User, opened: &OpenedTunnel) -> AccessDecision {
+        let host = opened.host.as_str();
+        let cookie = fixture.world.host_login(user, host).await.unwrap();
+        let request = AccessRequest {
+            host: opened.host.clone(),
+            cookie: Some(cookie),
+            session: None,
+            bearer: None,
+            accept: Some("text/html".to_owned()),
+            request: HookRequest {
+                method: "GET".to_owned(),
+                path: "/".to_owned(),
+                headers: Vec::new(),
+            },
+        };
+        Access::new(
+            Arc::clone(&fixture.ports),
+            Arc::clone(&fixture.world.settings),
+        )
+        .check(&request, &LinkTarget::Environment(opened.environment.id))
+        .await
+        .unwrap()
+    }
+
+    // TC: EXP-05, TEN-02 (`tenants` opens `tunnel.expose` to every user)
+    #[tokio::test(flavor = "multi_thread")]
+    async fn exposes_when_member_exposes() {
+        let fixture = fixture().await;
+        let opened = exposed(&fixture, &fixture.carol).await;
+        assert_eq!(
+            opened
+                .map(|opened| opened.environment.owner_user_id)
+                .map_err(|e| e.to_string()),
+            Ok(Some(fixture.carol.id))
+        );
+    }
+
+    // TC: EXP-08 (the owner opens their private address)
+    #[tokio::test(flavor = "multi_thread")]
+    async fn allows_owner_when_tunnel_is_private() {
+        let fixture = fixture().await;
+        let opened = exposed(&fixture, &fixture.carol).await.unwrap();
+        let decision = decided(&fixture, &fixture.carol, &opened).await;
+        assert_eq!(
+            decision,
+            AccessDecision::Allow {
+                user: Some(fixture.carol.clone())
+            }
+        );
+    }
+
+    // TC: EXP-08 (a member of the owner's tenant is no owner: refused)
+    #[tokio::test(flavor = "multi_thread")]
+    async fn forbidden_when_other_member_opens_private_tunnel() {
+        let fixture = fixture().await;
+        let opened = exposed(&fixture, &fixture.carol).await.unwrap();
+        let decision = decided(&fixture, &fixture.bob, &opened).await;
+        assert!(
+            matches!(&decision, AccessDecision::Forbidden(_)),
+            "{decision:?}"
+        );
+    }
+}

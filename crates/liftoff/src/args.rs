@@ -66,9 +66,10 @@ pub(crate) enum Command {
         #[arg(long, value_name = "G")]
         group: Option<String>,
     },
-    /// Run the project locally: `[dev] command` (else what stack
-    /// detection proposes) with `PORT` and the secrets in its environment.
-    Dev(DevArgs),
+    /// Expose a local port on the network through the server:
+    /// `https://<port>.localhost.<base>` on the server itself, else
+    /// `https://<login>-<id>.localhost.<base>`; private until `--share`.
+    Expose(ExposeArgs),
     /// Tenants: `use` is the CLI's own, the `tenants` module adds the
     /// rest (`create`, `ls`, `rm`, `members`).
     Tenant {
@@ -270,19 +271,15 @@ pub(crate) struct CreateArgs {
     pub(crate) owner: Option<String>,
 }
 
-/// `dev`.
+/// `expose`.
 #[derive(Debug, ClapArgs)]
-pub(crate) struct DevArgs {
-    /// Open the dev address to everyone (`share` before the tunnel
-    /// opens); `--local` has no dev address to open.
-    #[arg(long, conflicts_with = "local")]
-    pub(crate) share: bool,
-    /// No tunnel, even with a server.
+pub(crate) struct ExposeArgs {
+    /// The port of the app on this machine, e.g. 3000.
+    #[arg(value_name = "PORT", value_parser = clap::value_parser!(u16).range(1..))]
+    pub(crate) port: u16,
+    /// Open the address to everyone, without login.
     #[arg(long)]
-    pub(crate) local: bool,
-    /// The port instead of a free one of 4000–4999.
-    #[arg(long, value_name = "N")]
-    pub(crate) port: Option<u16>,
+    pub(crate) share: bool,
 }
 
 /// `tenant …`: `use` is built in (it writes the CLI config, which a
@@ -482,7 +479,12 @@ pub(crate) enum SecretCommand {
         scope: Scope,
     },
     /// Print the `.env` the environment runs with.
-    Pull,
+    Pull {
+        /// Write it to `.env.<env>` at the top of the working tree
+        /// (owner-only) instead of printing it.
+        #[arg(long)]
+        write: bool,
+    },
     /// Copy the secrets of local mode to the server.
     Push {
         /// Delete them locally once the server has them.

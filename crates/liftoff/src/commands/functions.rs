@@ -6,8 +6,8 @@
 //! the upload's progress on stderr; then the CLI waits for the deploy
 //! (`--wait` is the default for functions).
 //!
-//! The build is the person's own manifest string, run like the
-//! `[dev] command` of `lof dev`: `sh -c`, never from a server. Its stdout
+//! The build is the person's own manifest string, run with `sh -c`,
+//! never from a server. Its stdout
 //! and stderr both go to the CLI's stderr (the CLI owns stdout), and a
 //! build that fails ends the run with 1 before anything is uploaded
 //! (FDEP-07); so does a component that is not a function (FDEP-08).
@@ -32,7 +32,7 @@ use tokio::process::{Child, Command};
 use tokio::signal::unix::SignalKind;
 
 use super::deploys::queued;
-use super::dev::{group_of, stop_group, watching};
+use super::group::{group_of, stop_group, watching};
 use super::{Ctx, ProjectRef, resolve};
 use crate::Sleeper;
 use crate::error::CliError;
@@ -156,9 +156,9 @@ fn size(bytes: usize) -> String {
 /// Runs `line` with `sh -c` at `root` and passes what it prints on
 /// either stream to the CLI's stderr; a failure (or Ctrl-C) ends the run.
 ///
-/// The build leads its own process group, as the `[dev] command` does:
-/// Ctrl-C, and `SIGTERM` or `SIGHUP` of the CLI, end the whole group
-/// (`SIGTERM`, then `SIGKILL` after the grace period of `lof dev`), and
+/// The build leads its own process group ([`super::group`]): Ctrl-C,
+/// and `SIGTERM` or `SIGHUP` of the CLI, end the whole group (`SIGTERM`,
+/// then `SIGKILL` after a grace period), and
 /// so does the shell's exit, so what the build left running in the
 /// background cannot keep its pipes, and the run, open.
 async fn build<S: Sleeper>(ctx: &mut Ctx<'_, S>, root: &Path, line: &str) -> Result<(), CliError> {

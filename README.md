@@ -25,10 +25,11 @@ agent drive it for you).
 - **Keep secrets in one place.** API keys and passwords are stored
   encrypted, with a history of every change. Each environment (production,
   staging, your own) has its own values. Your app gets them as environment
-  variables, and so does your laptop when you run it locally.
-- **Show your work-in-progress.** `lof dev` runs the app on your machine
-  and gives it a private public address through a tunnel. Send the link to
-  a colleague or open it on your phone.
+  variables, and your laptop gets them as a `.env` file.
+- **Show your work-in-progress.** `lof expose 3000` gives the app running
+  on your machine a private public address through a tunnel, with hot
+  reload working through it. Send the link to a colleague or open it on
+  your phone.
 - **Use your own domains.** Every project gets a subdomain with HTTPS
   automatically. Add your own domains too, and with Cloudflare liftoff
   creates the DNS records itself.
@@ -90,7 +91,7 @@ lof redeploy --to 41           # back to an earlier deploy
 lof deploy --wait              # deploy a function now instead of waiting for CI
 lof secret set API_KEY=…       # add or change a secret
 lof domain add shop            # a new address for the project
-lof dev                        # run locally with a shareable address
+lof expose 3000                # a shareable address for localhost:3000
 lof artifact publish page.html # publish a page, get a link
 ```
 
@@ -115,7 +116,7 @@ can have its own. See [docs/TEMPLATES.md](docs/TEMPLATES.md).
 
 - [docs/REFERENCE.md](docs/REFERENCE.md): every command, the installer,
   local mode, modules and configuration in detail.
-- Guides: [functions](docs/FUNCTIONS.md), [`lof dev` and tunnels](docs/DEV.md),
+- Guides: [functions](docs/FUNCTIONS.md), [`lof expose` and tunnels](docs/EXPOSE.md),
   [pages (artifacts)](docs/ARTIFACTS.md), [MCP for agents](docs/MCP.md),
   [templates](docs/TEMPLATES.md), [writing a module](docs/MODULES.md).
 - [CHANGELOG.md](CHANGELOG.md): what changed in each release.

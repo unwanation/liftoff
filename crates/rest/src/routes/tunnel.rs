@@ -1,29 +1,33 @@
-//! `GET /api/v1/tunnel`: the WebSocket upgrade of `lof dev`.
+//! `GET /api/v1/tunnel`: the WebSocket upgrade of `lof expose`.
 //!
-//! The CLI sends its `cli` session as the bearer and the project in
-//! `X-Liftoff-Project`. The route answers `401` without a live session
-//! and `403` for a deploy token or a session that is no `cli` one
-//! (DEVT-06), asks
-//! [`TunnelsService::open`](liftoff_core::service::TunnelsService::open)
-//! for the caller's tunnel environment, answers `101` (with
-//! `X-Liftoff-Login-Url`, the one-time link of a private environment,
-//! DEVT-07) and hands the upgraded connection to the installed
-//! [`TunnelHandoff`]: the daemon's tunnel server.
+//! The CLI sends its `cli` session as the bearer, the port in
+//! `X-Liftoff-Expose` and, for `--share`, `X-Liftoff-Share: 1`. The
+//! route answers `401` without a live session and `403` for a deploy
+//! token or a session that is no `cli` one (DEVT-06), asks
+//! [`TunnelsService::expose`](liftoff_core::service::TunnelsService::expose)
+//! for the caller's tunnel of the port with the client's address (the
+//! peer, or for the local proxy's request the address it recorded last
+//! in `X-Forwarded-For`), answers `101` with `X-Liftoff-Address` (the
+//! tunnel's `https://` address) and `X-Liftoff-Login-Url` (the one-time
+//! link of a private tunnel, DEVT-07), and hands the upgraded connection
+//! to the installed [`TunnelHandoff`]: the daemon's tunnel server.
 
 use core::fmt;
+use core::net::{IpAddr, SocketAddr};
 use core::pin::Pin;
 use std::sync::Arc;
 
 use axum::Extension;
 use axum::body::Body;
-use axum::extract::{Request, State};
+use axum::extract::{ConnectInfo, Request, State};
 use axum::response::Response;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use hyper_util::rt::TokioIo;
-use liftoff_core::domain::{Bearer, Environment, ProjectName, SessionKind};
+use liftoff_core::domain::{Bearer, ContainerPort, Environment, SessionKind};
 use liftoff_core::ports::Ports;
+use liftoff_core::service::Exposure;
 use sha1::{Digest as _, Sha1};
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -31,10 +35,20 @@ use crate::error::ApiError;
 use crate::routes::auth::{bearer, hook_request};
 use crate::services::Services;
 
-/// The project the CLI opens its tunnel in.
-const PROJECT_HEADER: HeaderName = HeaderName::from_static("x-liftoff-project");
+/// The port `lof expose` exposes.
+const EXPOSE_HEADER: HeaderName = HeaderName::from_static("x-liftoff-expose");
 
-/// The one-time link of a private tunnel, for `lof dev` to print
+/// `1` for `lof expose --share`.
+const SHARE_HEADER: HeaderName = HeaderName::from_static("x-liftoff-share");
+
+/// The tunnel's address, `https://<name>.localhost.<base>`, for `lof
+/// expose` to print.
+const ADDRESS_HEADER: HeaderName = HeaderName::from_static("x-liftoff-address");
+
+/// What the local proxy records of the client it forwards.
+const FORWARDED_FOR: HeaderName = HeaderName::from_static("x-forwarded-for");
+
+/// The one-time link of a private tunnel, for `lof expose` to print
 /// (DEVT-07).
 const LOGIN_URL_HEADER: HeaderName = HeaderName::from_static("x-liftoff-login-url");
 
@@ -88,18 +102,18 @@ pub(crate) async fn upgrade<P: Ports>(
     {
         return Err(refused("a tunnel needs the session of `lof login`"));
     }
-    let headers = request.headers();
-    let project = headers
-        .get(&PROJECT_HEADER)
-        .and_then(|value| value.to_str().ok())
-        .ok_or_else(|| ApiError::bad_request("X-Liftoff-Project names the project"))?;
-    let project = ProjectName::new(project)?;
-    let accept = accept_key(headers)?;
+    let exposure = exposure_of(&request)?;
+    let accept = accept_key(request.headers())?;
     let Some(handoff) = slot.0 else {
         tracing::error!("GET /api/v1/tunnel has no tunnel server installed");
         return Err(ApiError::unavailable());
     };
-    let opened = services.tunnels.open(principal.user(), &project).await?;
+    let opened = services.tunnels.expose(principal.user(), exposure).await?;
+    let address =
+        HeaderValue::try_from(format!("https://{}", opened.host)).map_err(|_invalid| {
+            tracing::error!("the address of a tunnel is no header value");
+            ApiError::internal()
+        })?;
     let login_url = opened
         .login_url
         .as_deref()
@@ -129,10 +143,58 @@ pub(crate) async fn upgrade<P: Ports>(
     let _previous = answer.insert(header::UPGRADE, HeaderValue::from_static("websocket"));
     let _previous = answer.insert(header::CONNECTION, HeaderValue::from_static("upgrade"));
     let _previous = answer.insert(header::SEC_WEBSOCKET_ACCEPT, accept);
+    let _previous = answer.insert(ADDRESS_HEADER, address);
     if let Some(login_url) = login_url {
         let _previous = answer.insert(LOGIN_URL_HEADER, login_url);
     }
     Ok(response)
+}
+
+/// What the upgrade `request` asks to expose: the port of
+/// `X-Liftoff-Expose` (`400` without one of 1–65535), `X-Liftoff-Share:
+/// 1`, and the client's address ([`client_of`]).
+fn exposure_of(request: &Request) -> Result<Exposure, ApiError> {
+    let headers = request.headers();
+    let port = headers
+        .get(&EXPOSE_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse::<u16>().ok())
+        .ok_or_else(|| ApiError::bad_request("X-Liftoff-Expose names the port, 1–65535"))?;
+    let port = ContainerPort::new(port).map_err(|e| e.with_field("port"))?;
+    let share = headers
+        .get(&SHARE_HEADER)
+        .is_some_and(|value| value.as_bytes() == b"1");
+    let peer = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|ConnectInfo(peer)| *peer);
+    Ok(Exposure {
+        port,
+        client: client_of(headers, peer),
+        share,
+    })
+}
+
+/// The client of a request whose peer is `peer`: the peer itself, but
+/// for a loopback peer (the local proxy) that forwarded the request the
+/// address the proxy recorded last in `X-Forwarded-For`; `None` when
+/// the peer is unknown or the header is no address.
+fn client_of(headers: &HeaderMap, peer: Option<SocketAddr>) -> Option<IpAddr> {
+    let peer = peer?.ip();
+    if !peer.is_loopback() {
+        return Some(peer);
+    }
+    let Some(forwarded) = headers.get(&FORWARDED_FOR) else {
+        return Some(peer);
+    };
+    forwarded
+        .to_str()
+        .ok()?
+        .rsplit(',')
+        .next()?
+        .trim()
+        .parse()
+        .ok()
 }
 
 /// `403` with `detail`: the CLI's client does not retry it.
@@ -211,6 +273,63 @@ mod tests {
                 accept_key(&headers).map_err(|error| error.status()),
                 Err(StatusCode::BAD_REQUEST)
             );
+        }
+    }
+
+    mod client_of {
+        use super::*;
+
+        fn forwarded(value: &'static str) -> HeaderMap {
+            let mut headers = HeaderMap::new();
+            let _previous = headers.insert(FORWARDED_FOR, HeaderValue::from_static(value));
+            headers
+        }
+
+        fn at(raw: &str) -> SocketAddr {
+            raw.parse().unwrap()
+        }
+
+        // TC: EXP-01 (a CLI that reached the API listener itself)
+        #[test]
+        fn loopback_when_local_peer_was_not_forwarded() {
+            assert_eq!(
+                client_of(&HeaderMap::new(), Some(at("127.0.0.1:50000"))),
+                Some(IpAddr::from([127, 0, 0, 1]))
+            );
+        }
+
+        // TC: EXP-01 (the local proxy's record, its last entry)
+        #[test]
+        fn last_proxy_entry_when_local_peer_forwarded() {
+            assert_eq!(
+                client_of(
+                    &forwarded("10.0.0.1, 198.51.100.7"),
+                    Some(at("127.0.0.1:50000"))
+                ),
+                Some(IpAddr::from([198, 51, 100, 7]))
+            );
+        }
+
+        // TC: EXP-02 (a header from outside the machine counts for nothing)
+        #[test]
+        fn peer_when_peer_is_outside_machine() {
+            assert_eq!(
+                client_of(&forwarded("127.0.0.1"), Some(at("198.51.100.7:50000"))),
+                Some(IpAddr::from([198, 51, 100, 7]))
+            );
+        }
+
+        #[test]
+        fn unknown_when_forwarded_for_is_no_address() {
+            assert_eq!(
+                client_of(&forwarded("somewhere"), Some(at("127.0.0.1:50000"))),
+                None
+            );
+        }
+
+        #[test]
+        fn unknown_when_peer_unknown() {
+            assert_eq!(client_of(&HeaderMap::new(), None), None);
         }
     }
 }

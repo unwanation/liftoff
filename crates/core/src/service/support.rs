@@ -19,6 +19,18 @@ use crate::proxy_config::ProxyConfig;
 use super::authorizer::Authorizer;
 use super::settings::Settings;
 
+/// The repository (on the base host, which no forge is) of the
+/// installation's own project of exposed ports
+/// ([`TunnelsService::expose`](super::TunnelsService::expose)).
+pub(super) const EXPOSURES_REPO: &str = "liftoff/localhost";
+
+/// Whether `project` is the installation's own project of exposed ports,
+/// which no list shows and no user creates.
+#[must_use]
+pub fn is_exposures(project: &Project, settings: &Settings) -> bool {
+    project.git_host == settings.base && project.repo.to_string() == EXPOSURES_REPO
+}
+
 /// The project `name`, in whichever tenant it is.
 ///
 /// A project name is unique across tenants: [`ProjectService::create`]

@@ -36,11 +36,8 @@ pub(crate) const EXCHANGE: Duration = Duration::from_secs(10);
 /// The CLI session the client presents.
 pub(crate) const TOKEN: &str = "lfs_tunnel_test";
 
-/// The project the client names.
-pub(crate) const PROJECT: &str = "shop";
-
-/// The environment the daemon finds for [`PROJECT`] (step 2).
-pub(crate) const ENVIRONMENT: &str = "shop-dev";
+/// The environment the daemon finds for the port (step 2).
+pub(crate) const ENVIRONMENT: &str = "3000";
 
 /// The daemon's side: [`TunnelServer`] behind `GET /api/v1/tunnel`.
 pub(crate) struct Daemon {
@@ -131,14 +128,14 @@ impl Daemon {
         format!("ws://{}/api/v1/tunnel", self.addr)
     }
 
-    /// A client of [`PROJECT`] for the local port, with the keepalive and
+    /// A private client of the local port, with the keepalive and
     /// short waits between attempts.
     pub(crate) fn client_config(&self, local_port: u16, keepalive: Duration) -> ClientConfig {
         ClientConfig {
             url: self.url(),
             token: TOKEN.to_owned(),
-            project: PROJECT.to_owned(),
             local_port,
+            share: false,
             keepalive,
             backoff: Backoff {
                 initial: Duration::from_millis(10),
@@ -449,7 +446,7 @@ pub(crate) struct Received {
     pub(crate) body: Bytes,
 }
 
-/// The developer's app on `127.0.0.1:<port>` (`lof dev`'s command).
+/// The developer's app on `127.0.0.1:<port>` (what `lof expose` exposes).
 ///
 /// - `/bytes` answers `201`, `x-app: tunnel` and [`bytes_body`];
 /// - `/hold` notifies `entered` and answers `200 held` once `release`
@@ -470,6 +467,17 @@ impl LocalApp {
 
     pub(crate) async fn start(name: &'static str) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        Self::serving(name, listener)
+    }
+
+    /// The app on `[::1]` only, as a dev server on `localhost` may
+    /// listen; `None` on a host without IPv6.
+    pub(crate) async fn start_on_ipv6(name: &'static str) -> Option<Self> {
+        let listener = TcpListener::bind("[::1]:0").await.ok()?;
+        Some(Self::serving(name, listener))
+    }
+
+    fn serving(name: &'static str, listener: TcpListener) -> Self {
         let port = listener.local_addr().expect("address").port();
         let entered = Arc::new(Notify::new());
         let release = Arc::new(Notify::new());

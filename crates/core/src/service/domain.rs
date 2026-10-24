@@ -26,6 +26,7 @@ use crate::domain::{
     Domain, DomainId, DomainKind, Host, Label, ModuleName, Project, ProjectName, Timestamp, User,
 };
 use crate::error::{Error, System};
+use crate::expose::ZONE;
 use crate::ports::{
     Action, Clock as _, HookResult, Hooks as _, ModuleRequest, Ports, Resolver as _, Resource,
     Rng as _, Store as _,
@@ -420,14 +421,29 @@ impl<P: Ports> DomainService<P> {
     ///
     /// # Errors
     ///
-    /// [`Error::Validation`] on `label` for a reserved label;
+    /// [`Error::Validation`] on `label` for a reserved label (and for
+    /// `localhost`, the zone of exposed ports);
     /// [`Error::Conflict`] when the host is taken; whatever the store
     /// reports.
     pub(super) async fn admit_managed(&self, label: &Label) -> Result<Host, Error> {
-        if self.settings.reserved.contains(label) {
+        if self.settings.reserved.contains(label) || label.as_str() == ZONE {
             return Err(reserved(label));
         }
         let host = Host::under(label, &self.settings.base)?;
+        self.ensure_host_free(&host).await?;
+        Ok(host)
+    }
+
+    /// The address of an exposed port, `<label>.localhost.<base>`, once
+    /// the host is free.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Conflict`] when the host is taken; whatever the store
+    /// reports.
+    pub(super) async fn admit_exposed(&self, label: &Label) -> Result<Host, Error> {
+        let zone = Host::under(&Label::new(ZONE)?, &self.settings.base)?;
+        let host = Host::under(label, &zone)?;
         self.ensure_host_free(&host).await?;
         Ok(host)
     }
@@ -441,7 +457,11 @@ impl<P: Ports> DomainService<P> {
     /// [`Error::Conflict`] when it is taken; whatever the store reports.
     pub(super) async fn admit_external(&self, host: &Host) -> Result<(), Error> {
         let base = &self.settings.base;
-        if host == base || host.label_in(base).is_some() {
+        let below = host
+            .as_str()
+            .strip_suffix(base.as_str())
+            .is_some_and(|rest| rest.ends_with('.'));
+        if host == base || below {
             return Err(Error::invalid(
                 "host",
                 format!("{host} is under {base}: add it as a managed domain"),
@@ -1020,6 +1040,26 @@ mod tests {
             let err = world
                 .domains()
                 .add_external(&world.owner, &project("shop"), host("blog.apps.test"))
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(&err, Error::Validation(v) if v.field == "host") && !resolved(&world),
+                "{err:?}"
+            );
+        }
+
+        // TC: DOM-03, EXP-03 (nor a host deeper under the base: the
+        // addresses of `lof expose` are `<name>.localhost.<base>`)
+        #[tokio::test]
+        async fn validation_when_host_is_deeper_under_base() {
+            let world = World::new().await;
+            let err = world
+                .domains()
+                .add_external(
+                    &world.owner,
+                    &project("shop"),
+                    host("3000.localhost.apps.test"),
+                )
                 .await
                 .unwrap_err();
             assert!(

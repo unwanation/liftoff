@@ -1,9 +1,9 @@
 [package]
 name = "liftoff-module-tenants"
 description = "The tenants module of liftoff: tenants with owners and members, quotas, and the protect gate on environments."
-# 0.2.0: the `artifact.*` actions, after the released 0.1.0
-#; the registry never replaces a version.
-version = "0.2.0"
+# 0.2.0: the `artifact.*` actions, after the released 0.1.0; 0.3.0:
+# `tunnel.expose`. The registry never replaces a version.
+version = "0.3.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

@@ -1,31 +1,23 @@
-//! DEVT-01…DEVT-08 at the core: the tunnel environment of `lof dev`, its
-//! dev address, its state over the fake clock, start-up and `rm`.
+//! EXP-01…EXP-07 and DEVT-01…DEVT-08 at the core: the tunnel of `lof
+//! expose`, its address, its state over the fake clock, start-up and
+//! `rm`.
 
-use std::collections::BTreeMap;
+use std::net::Ipv4Addr;
 
 use time::Duration;
-use ulid::Ulid;
 
 use super::*;
-use crate::domain::{
-    DomainKind, EnvKind, EnvName, EnvState, InstalledModule, LinkSecret, LinkTarget, ModuleName,
-    ModuleVersion, TenantId, Timestamp, UserRole, Visibility,
-};
+use crate::domain::{DomainKind, EnvKind, EnvState, LinkSecret, LinkTarget, UserRole, Visibility};
 use crate::fakes::{FakePorts, HookCall, World};
 use crate::proxy_config::Route;
 use crate::service::Reconciler;
 
-/// The dev address of `shop` in single-user mode.
-const DEV_HOST: &str = "shop-dev.apps.test";
+/// The address of port 3000 exposed on the server.
+const DEV_HOST: &str = "3000.localhost.apps.test";
 
 /// `raw` as a [`Host`].
 fn host(raw: &str) -> Host {
     Host::new(raw).unwrap()
-}
-
-/// `shop`, the project every test opens its tunnel in.
-fn shop(world: &World) -> ProjectName {
-    world.shop.name.clone()
 }
 
 /// `environment` as stored now.
@@ -72,31 +64,35 @@ fn created_hosts(world: &World) -> Vec<String> {
         .collect()
 }
 
-/// The tenant `shop` is in once [`with_tenants`] ran.
-fn tenant() -> TenantId {
-    TenantId::new(Ulid::from_parts(7, 7))
+/// `port` exposed from the daemon's own machine (the loopback), not
+/// shared.
+fn on_server(port: u16) -> Exposure {
+    Exposure {
+        port: ContainerPort::new(port).unwrap(),
+        client: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+        share: false,
+    }
 }
 
-/// Makes the world one with the `tenants` module: the module installed
-/// and enabled, and `shop` in its tenant (as the module's
-/// `project_tenant` would have put it).
-async fn with_tenants(world: &World) {
-    let store = &world.ports.store;
-    store
-        .insert_module(&InstalledModule {
-            name: ModuleName::new("tenants").unwrap(),
-            version: ModuleVersion::new("0.1.0").unwrap(),
-            sha256: "ab".repeat(32),
-            enabled: true,
-            config: BTreeMap::new(),
-            error: None,
-            installed_at: Timestamp::UNIX_EPOCH,
-        })
+/// `port` exposed from a laptop somewhere else, not shared.
+fn elsewhere(port: u16) -> Exposure {
+    Exposure {
+        client: Some(IpAddr::V4(Ipv4Addr::new(198, 51, 100, 7))),
+        ..on_server(port)
+    }
+}
+
+/// The installation's project of exposed ports, as stored now.
+async fn exposures(world: &World) -> Option<Project> {
+    world
+        .ports
+        .store
+        .project_by_repo(
+            &host(World::BASE),
+            &RepoRef::new("liftoff/localhost").unwrap(),
+        )
         .await
-        .unwrap();
-    let mut project = world.shop.clone();
-    project.tenant_id = Some(tenant());
-    store.update_project(&project).await.unwrap();
+        .unwrap()
 }
 
 /// The tunnel server's number of a tunnel's first connection.
@@ -105,10 +101,10 @@ const FIRST: u64 = 0;
 /// The number of the connection that replaced or followed [`FIRST`].
 const SECOND: u64 = 1;
 
-/// `owner`'s tunnel of `shop`, opened and connected through `tunnels` as
-/// its [`FIRST`] connection.
+/// `owner`'s tunnel of port 3000 on the server, exposed and connected
+/// through `tunnels` as its [`FIRST`] connection.
 async fn connected_tunnel(world: &World, tunnels: &TunnelsService<FakePorts>) -> Environment {
-    let opened = tunnels.open(&world.owner, &shop(world)).await.unwrap();
+    let opened = tunnels.expose(&world.owner, on_server(3000)).await.unwrap();
     tunnels
         .connected(opened.environment.id, FIRST)
         .await
@@ -120,14 +116,14 @@ fn advance(world: &World, seconds: i64) {
     world.ports.clock.advance(Duration::seconds(seconds));
 }
 
-mod open {
+mod expose {
     use super::*;
 
-    // TC: DEVT-01
+    // TC: EXP-03
     #[tokio::test]
-    async fn creates_private_shop_dev_tunnel_of_actor_when_first_opened() {
+    async fn creates_private_tunnel_of_actor_when_first_exposed() {
         let world = World::new().await;
-        let opened = world.tunnels().open(&world.owner, &shop(&world)).await;
+        let opened = world.tunnels().expose(&world.owner, on_server(3000)).await;
         let environment = opened.map(|opened| opened.environment);
         assert_eq!(
             environment.ok().map(|environment| (
@@ -137,7 +133,7 @@ mod open {
                 environment.visibility,
             )),
             Some((
-                "shop-dev".to_owned(),
+                "3000".to_owned(),
                 EnvKind::Tunnel,
                 Some(world.owner.id),
                 Visibility::Private
@@ -145,39 +141,111 @@ mod open {
         );
     }
 
-    // TC: DEVT-01
+    // TC: EXP-01
     #[tokio::test]
-    async fn stores_created_tunnel_when_first_opened() {
+    async fn port_under_localhost_zone_when_exposed_on_server() {
         let world = World::new().await;
-        let opened = world
-            .tunnels()
-            .open(&world.owner, &shop(&world))
-            .await
-            .unwrap();
-        let found = world
-            .ports
-            .store
-            .environment_by_name(world.shop.id, &EnvName::new("shop-dev").unwrap())
-            .await
-            .unwrap();
-        assert_eq!(found.map(|found| found.id), Some(opened.environment.id));
-    }
-
-    // TC: DEVT-01
-    #[tokio::test]
-    async fn answers_dev_address_under_base_when_first_opened() {
-        let world = World::new().await;
-        let opened = world.tunnels().open(&world.owner, &shop(&world)).await;
+        let opened = world.tunnels().expose(&world.owner, on_server(3000)).await;
         assert_eq!(opened.ok().map(|opened| opened.host), Some(host(DEV_HOST)));
     }
 
-    // TC: DEVT-01
+    // TC: EXP-01 (the server's public IP is its own machine too)
     #[tokio::test]
-    async fn binds_managed_dev_domain_to_tunnel_when_first_opened() {
+    async fn port_under_localhost_zone_when_client_is_public_ip() {
+        let world = World::new().await;
+        let exposure = Exposure {
+            client: Some(IpAddr::V4(World::PUBLIC_IP)),
+            ..on_server(3000)
+        };
+        let opened = world.tunnels().expose(&world.owner, exposure).await;
+        assert_eq!(opened.ok().map(|opened| opened.host), Some(host(DEV_HOST)));
+    }
+
+    // TC: EXP-02
+    #[tokio::test]
+    async fn login_and_id_under_localhost_zone_when_exposed_elsewhere() {
+        let world = World::new().await;
+        let opened = world.tunnels().expose(&world.owner, elsewhere(3000)).await;
+        let name = exposure_name("owner", &world.owner.id.to_string(), 3000, false);
+        assert_eq!(
+            opened.ok().map(|opened| opened.host),
+            Some(host(&format!("{name}.localhost.apps.test")))
+        );
+    }
+
+    // TC: EXP-02 (a client the adapter cannot place is somewhere else)
+    #[tokio::test]
+    async fn login_and_id_when_client_unknown() {
+        let world = World::new().await;
+        let exposure = Exposure {
+            client: None,
+            ..on_server(3000)
+        };
+        let opened = world
+            .tunnels()
+            .expose(&world.owner, exposure)
+            .await
+            .unwrap();
+        assert!(
+            opened.environment.name.as_str().starts_with("owner-"),
+            "{}",
+            opened.environment.name
+        );
+    }
+
+    // TC: EXP-04 (no project of a user: the installation's own one)
+    #[tokio::test]
+    async fn tunnel_in_exposures_project_when_first_exposed() {
         let world = World::new().await;
         let opened = world
             .tunnels()
-            .open(&world.owner, &shop(&world))
+            .expose(&world.owner, on_server(3000))
+            .await
+            .unwrap();
+        let project = exposures(&world).await;
+        assert_eq!(
+            project.map(|project| (project.id, project.name.to_string())),
+            Some((opened.environment.project_id, "localhost".to_owned()))
+        );
+    }
+
+    // TC: EXP-04
+    #[tokio::test]
+    async fn one_exposures_project_when_two_ports_exposed() {
+        let world = World::new().await;
+        let tunnels = world.tunnels();
+        let first = tunnels.expose(&world.owner, on_server(3000)).await.unwrap();
+        let second = tunnels.expose(&world.owner, on_server(5173)).await.unwrap();
+        assert_eq!(first.environment.project_id, second.environment.project_id);
+    }
+
+    // TC: EXP-04 (`lof projects` never shows it)
+    #[tokio::test]
+    async fn exposures_project_not_listed_when_tunnel_exposed() {
+        let world = World::new().await;
+        world
+            .tunnels()
+            .expose(&world.owner, on_server(3000))
+            .await
+            .unwrap();
+        let names: Vec<String> = world
+            .projects()
+            .list(&world.owner)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|project| project.name.to_string())
+            .collect();
+        assert_eq!(names, vec!["shop".to_owned()]);
+    }
+
+    // TC: EXP-03
+    #[tokio::test]
+    async fn binds_managed_domain_to_tunnel_when_first_exposed() {
+        let world = World::new().await;
+        let opened = world
+            .tunnels()
+            .expose(&world.owner, on_server(3000))
             .await
             .unwrap();
         let store = &world.ports.store;
@@ -188,153 +256,82 @@ mod open {
             .unwrap();
         let binding = store.binding_by_domain(domain.id).await.unwrap();
         assert_eq!(
-            (
-                domain.kind,
-                domain.project_id,
-                binding.map(|b| b.environment_id)
-            ),
-            (
-                DomainKind::Managed,
-                world.shop.id,
-                Some(opened.environment.id)
-            )
+            (domain.kind, binding.map(|b| b.environment_id)),
+            (DomainKind::Managed, Some(opened.environment.id))
         );
     }
 
-    // TC: DEVT-01
+    // TC: EXP-03
     #[tokio::test]
-    async fn asks_domain_created_about_dev_address_when_first_opened() {
+    async fn asks_domain_created_about_address_when_first_exposed() {
         let world = World::new().await;
         world
             .tunnels()
-            .open(&world.owner, &shop(&world))
+            .expose(&world.owner, on_server(3000))
             .await
             .unwrap();
         assert_eq!(created_hosts(&world), vec![DEV_HOST.to_owned()]);
     }
 
-    // TC: DEVT-01
+    // TC: EXP-05 (without modules only the admin exposes)
     #[tokio::test]
-    async fn not_found_when_project_unknown() {
+    async fn forbidden_when_actor_is_no_admin_without_modules() {
         let world = World::new().await;
-        let opened = world
-            .tunnels()
-            .open(&world.owner, &ProjectName::new("nope").unwrap())
-            .await;
-        assert!(matches!(opened, Err(Error::NotFound(_))), "{opened:?}");
+        let alice = world.add_user("alice", UserRole::User).await.unwrap();
+        let opened = world.tunnels().expose(&alice, elsewhere(3000)).await;
+        assert!(matches!(opened, Err(Error::Forbidden(_))), "{opened:?}");
     }
 
-    // TC: DEVT-02
+    // TC: EXP-05 (the hook is asked once, about the installation)
     #[tokio::test]
-    async fn names_tunnel_after_login_when_tenants_installed() {
+    async fn asks_authorize_about_installation_when_exposed() {
         let world = World::new().await;
-        with_tenants(&world).await;
-        let opened = world.tunnels().open(&world.owner, &shop(&world)).await;
+        world
+            .tunnels()
+            .expose(&world.owner, on_server(3000))
+            .await
+            .unwrap();
         assert_eq!(
-            opened
-                .ok()
-                .map(|opened| (opened.environment.name.to_string(), opened.host)),
-            Some(("shop-owner".to_owned(), host("shop-owner.apps.test")))
+            world.log().authorized(),
+            vec![(world.owner.id, Action::TunnelExpose, Resource::Admin)]
         );
     }
 
-    // TC: DEVT-02
+    // TC: EXP-06 (a port on the server is its first user's)
     #[tokio::test]
-    async fn two_tunnels_when_two_users_open_with_tenants() {
+    async fn conflict_when_second_user_exposes_same_port_on_server() {
         let world = World::new().await;
-        with_tenants(&world).await;
         let alice = world.add_user("alice", UserRole::Admin).await.unwrap();
         let tunnels = world.tunnels();
-        let of_owner = tunnels.open(&world.owner, &shop(&world)).await.unwrap();
-        let of_alice = tunnels.open(&alice, &shop(&world)).await.unwrap();
+        tunnels.expose(&world.owner, on_server(3000)).await.unwrap();
+        let opened = tunnels.expose(&alice, on_server(3000)).await;
+        assert!(matches!(opened, Err(Error::Conflict(_))), "{opened:?}");
+    }
+
+    // TC: EXP-06 (elsewhere each user has an address of their own)
+    #[tokio::test]
+    async fn two_tunnels_when_two_users_expose_same_port_elsewhere() {
+        let world = World::new().await;
+        let alice = world.add_user("alice", UserRole::Admin).await.unwrap();
+        let tunnels = world.tunnels();
+        let of_owner = tunnels.expose(&world.owner, elsewhere(3000)).await.unwrap();
+        let of_alice = tunnels.expose(&alice, elsewhere(3000)).await.unwrap();
         assert_eq!(
             (
-                of_owner.environment.id != of_alice.environment.id,
-                of_owner.environment.owner_user_id,
-                of_alice.environment.name.to_string(),
-                of_alice.environment.owner_user_id,
-                of_alice.host,
+                of_owner.host != of_alice.host,
+                of_alice.environment.owner_user_id
             ),
-            (
-                true,
-                Some(world.owner.id),
-                "shop-alice".to_owned(),
-                Some(alice.id),
-                host("shop-alice.apps.test"),
-            )
+            (true, Some(alice.id))
         );
-    }
-
-    // TC: DEVT-02 (the dev address is a domain of the project, so the
-    // `tenants` module's `tenant_of(host)` finds its tenant)
-    #[tokio::test]
-    async fn dev_domain_is_in_projects_tenant_when_tenants_installed() {
-        let world = World::new().await;
-        with_tenants(&world).await;
-        world
-            .tunnels()
-            .open(&world.owner, &shop(&world))
-            .await
-            .unwrap();
-        let domain = world
-            .ports
-            .store
-            .domain_by_host(&host("shop-owner.apps.test"))
-            .await
-            .unwrap();
-        assert_eq!(domain.map(|domain| domain.tenant_id), Some(Some(tenant())));
-    }
-
-    // TC: DEVT-02 (a login becomes a label, lowercased, every other character `-`)
-    #[tokio::test]
-    async fn mangles_login_into_name_when_tenants_installed() {
-        let world = World::new().await;
-        with_tenants(&world).await;
-        let bob = world.add_user("Bob.Smith", UserRole::Admin).await.unwrap();
-        let opened = world.tunnels().open(&bob, &shop(&world)).await;
-        assert_eq!(
-            opened
-                .ok()
-                .map(|opened| (opened.environment.name.to_string(), opened.host)),
-            Some((
-                "shop-bob-smith".to_owned(),
-                host("shop-bob-smith.apps.test")
-            ))
-        );
-    }
-
-    // TC: DEVT-01 (a compose environment named like the tunnel is no
-    // tunnel to reuse)
-    #[tokio::test]
-    async fn conflict_when_name_taken_by_compose_environment() {
-        let world = World::new().await;
-        world
-            .add_environment(&world.shop, "shop-dev")
-            .await
-            .unwrap();
-        let opened = world.tunnels().open(&world.owner, &shop(&world)).await;
-        assert!(matches!(opened, Err(Error::Conflict(_))), "{opened:?}");
-    }
-
-    // TC: DEVT-01 (single-user mode has one `<project>-dev`: it is its
-    // owner's, a second user may not take it over)
-    #[tokio::test]
-    async fn conflict_when_second_user_opens_single_user_tunnel() {
-        let world = World::new().await;
-        let alice = world.add_user("alice", UserRole::Admin).await.unwrap();
-        let tunnels = world.tunnels();
-        tunnels.open(&world.owner, &shop(&world)).await.unwrap();
-        let opened = tunnels.open(&alice, &shop(&world)).await;
-        assert!(matches!(opened, Err(Error::Conflict(_))), "{opened:?}");
     }
 
     // TC: DEVT-04
     #[tokio::test]
-    async fn same_environment_when_opened_again() {
+    async fn same_environment_when_exposed_again() {
         let world = World::new().await;
         let tunnels = world.tunnels();
-        let first = tunnels.open(&world.owner, &shop(&world)).await.unwrap();
-        let again = tunnels.open(&world.owner, &shop(&world)).await.unwrap();
+        let first = tunnels.expose(&world.owner, elsewhere(3000)).await.unwrap();
+        let again = tunnels.expose(&world.owner, elsewhere(3000)).await.unwrap();
         assert_eq!(
             (again.environment.id, again.host),
             (first.environment.id, first.host)
@@ -343,29 +340,12 @@ mod open {
 
     // TC: DEVT-04 (no new domain, and the hook is not asked again)
     #[tokio::test]
-    async fn no_new_domain_when_opened_again() {
+    async fn no_new_domain_when_exposed_again() {
         let world = World::new().await;
         let tunnels = world.tunnels();
-        tunnels.open(&world.owner, &shop(&world)).await.unwrap();
-        let before = world
-            .ports
-            .store
-            .domains_of_project(world.shop.id)
-            .await
-            .unwrap()
-            .len();
-        tunnels.open(&world.owner, &shop(&world)).await.unwrap();
-        let after = world
-            .ports
-            .store
-            .domains_of_project(world.shop.id)
-            .await
-            .unwrap()
-            .len();
-        assert_eq!(
-            (after, created_hosts(&world)),
-            (before, vec![DEV_HOST.to_owned()])
-        );
+        tunnels.expose(&world.owner, on_server(3000)).await.unwrap();
+        tunnels.expose(&world.owner, on_server(3000)).await.unwrap();
+        assert_eq!(created_hosts(&world), vec![DEV_HOST.to_owned()]);
     }
 
     // TC: DEVT-07
@@ -374,7 +354,7 @@ mod open {
         let world = World::new().await;
         let opened = world
             .tunnels()
-            .open(&world.owner, &shop(&world))
+            .expose(&world.owner, on_server(3000))
             .await
             .unwrap();
         let url = opened.login_url.unwrap_or_default();
@@ -386,11 +366,11 @@ mod open {
 
     // TC: DEVT-07 (the link is a one-time link of 2.1 to the tunnel)
     #[tokio::test]
-    async fn login_link_redeems_for_tunnel_when_issued_by_open() {
+    async fn login_link_redeems_for_tunnel_when_issued_by_expose() {
         let world = World::new().await;
         let opened = world
             .tunnels()
-            .open(&world.owner, &shop(&world))
+            .expose(&world.owner, on_server(3000))
             .await
             .unwrap();
         let url = opened.login_url.unwrap();
@@ -405,19 +385,43 @@ mod open {
         );
     }
 
-    // TC: DEVT-07 (a shared address needs no login)
+    // TC: DEVT-07, EXP-07 (`--share`: open to everyone, no login)
     #[tokio::test]
-    async fn no_login_link_when_tunnel_shared() {
+    async fn shared_without_login_link_when_exposed_with_share() {
         let world = World::new().await;
-        let tunnels = world.tunnels();
-        let first = tunnels.open(&world.owner, &shop(&world)).await.unwrap();
-        world
-            .visibility()
-            .share(&world.owner, &world.shop.name, &first.environment.name)
+        let exposure = Exposure {
+            share: true,
+            ..on_server(3000)
+        };
+        let opened = world
+            .tunnels()
+            .expose(&world.owner, exposure)
             .await
             .unwrap();
-        let again = tunnels.open(&world.owner, &shop(&world)).await.unwrap();
-        assert_eq!(again.login_url, None);
+        assert_eq!(
+            (opened.environment.visibility, opened.login_url),
+            (Visibility::Shared, None)
+        );
+    }
+
+    // TC: EXP-07 (a run without `--share` closes it again)
+    #[tokio::test]
+    async fn private_again_when_exposed_without_share() {
+        let world = World::new().await;
+        let tunnels = world.tunnels();
+        let shared = Exposure {
+            share: true,
+            ..on_server(3000)
+        };
+        tunnels.expose(&world.owner, shared).await.unwrap();
+        let again = tunnels.expose(&world.owner, on_server(3000)).await.unwrap();
+        assert_eq!(
+            (
+                again.environment.visibility,
+                stored(&world, again.environment.id).await.visibility
+            ),
+            (Visibility::Private, Visibility::Private)
+        );
     }
 }
 
@@ -553,7 +557,7 @@ mod disconnected {
             .disconnected(tunnel.id, FIRST, TunnelEnd::Shutdown)
             .await
             .unwrap();
-        let again = tunnels.open(&world.owner, &shop(&world)).await.unwrap();
+        let again = tunnels.expose(&world.owner, on_server(3000)).await.unwrap();
         let reconnected = tunnels
             .connected(again.environment.id, SECOND)
             .await
@@ -582,7 +586,7 @@ mod disconnected {
             .disconnected(tunnel.id, FIRST, TunnelEnd::Shutdown)
             .await
             .unwrap();
-        let again = tunnels.open(&world.owner, &shop(&world)).await.unwrap();
+        let again = tunnels.expose(&world.owner, on_server(3000)).await.unwrap();
         tunnels
             .connected(again.environment.id, SECOND)
             .await

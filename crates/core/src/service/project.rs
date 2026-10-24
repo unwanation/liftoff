@@ -8,12 +8,13 @@ use std::sync::Arc;
 
 use super::authorizer::Authorizer;
 use super::settings::Settings;
-use super::support::{authorize, authorized, authorized_project, ensure_repo_admin};
+use super::support::{authorize, authorized, authorized_project, ensure_repo_admin, is_exposures};
 use crate::domain::{
     Host, NewProject, Project, ProjectId, ProjectName, RepoRef, TemplateRef, TenantId, TenantSlug,
     User,
 };
 use crate::error::Error;
+use crate::expose::ZONE;
 use crate::ports::{Action, Clock as _, Hooks as _, Ports, Resource, Rng as _, Store as _};
 
 /// See the [module documentation](self).
@@ -162,6 +163,12 @@ impl<P: Ports> ProjectService<P> {
         chosen: Option<TenantId>,
         new: &NewProject,
     ) -> Result<(), Error> {
+        if new.name.as_str() == ZONE {
+            return Err(Error::invalid(
+                "project",
+                format!("{ZONE} is reserved: it holds the ports of `lof expose`"),
+            ));
+        }
         let store = self.ports.store();
         if let Some(taken) = store.project_by_repo(&new.git_host, &new.repo).await? {
             return Err(Error::conflict(format!(
@@ -224,7 +231,8 @@ impl<P: Ports> ProjectService<P> {
             &Resource::Admin,
         )
         .await?;
-        let projects = self.ports.store().projects().await?;
+        let mut projects = self.ports.store().projects().await?;
+        projects.retain(|project| !is_exposures(project, &self.settings));
         Ok(Authorizer::new(self.ports.as_ref())
             .visible(actor, Action::ProjectList, projects, |project| {
                 Resource::Project(project.id)

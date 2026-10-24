@@ -3,6 +3,46 @@
 Notable changes per release. Versions follow [SemVer](https://semver.org/);
 the format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- `lof expose <PORT>` puts a port of the machine on the network through
+  the server, with no project needed: the app runs as usual (`npm run
+  dev`), and its own WebSocket (Vite's or webpack's hot reload) crosses
+  the tunnel, so changes show without a reload. On the server's own
+  machine the address is `https://<port>.localhost.<base>`; anywhere else
+  `https://<login>-<id>.localhost.<base>`, the same for a user and port
+  on every run. The address is private (the owner and the admin; the
+  `oidc` module's single sign-on, else the printed one-time link) until
+  `--share`. Without the `dns.*` module the server needs the DNS record
+  `*.localhost.<base>`. See `docs/EXPOSE.md`.
+- `lof secret pull --write` writes the environment's secrets into
+  `.env.<env>` at the top of the working tree (`0600`) and prints its
+  path.
+- The tunnel reaches an app that listens on `[::1]` only (Vite on recent
+  Node), and the app is asked with `Host: localhost`, which dev servers
+  accept without `allowedHosts` (the address is in `X-Forwarded-Host`).
+- Module `tenants` 0.3.0 lets every user `tunnel.expose`.
+
+### Removed
+
+- **Breaking:** `lof dev` and the tunnels of projects (`<project>-dev`,
+  `<project>-<login>`). Run the app yourself, `lof secret pull --write`
+  for its secrets, `lof expose <PORT>` for an address. `GET
+  /api/v1/tunnel` now takes the port in `X-Liftoff-Expose` instead of
+  `X-Liftoff-Project`, and the `authorize` action `tunnel.open` is
+  `tunnel.expose`, about the installation (`admin`) instead of the
+  project. `[dev] command` stays valid in `liftoff.toml`, but nothing
+  runs it. Existing tunnel environments stay offline until `lof env rm`.
+
+### Changed
+
+- A project may not be named `localhost`, and `localhost` is a reserved
+  label of managed domains: the zone of exposed ports. An external domain
+  deeper under the base (`a.b.<base>`) is refused like one directly under
+  it.
+
 ## [2.0.3] - 2026-10-23
 
 ### Changed

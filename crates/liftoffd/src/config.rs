@@ -50,7 +50,7 @@ pub struct AppConfig {
     pub proxy: ProxyConfig,
     /// Functions.
     pub functions: FunctionsConfig,
-    /// Tunnels of `lof dev`.
+    /// Tunnels of `lof expose`.
     pub tunnel: TunnelConfig,
     /// The gate of protected environments.
     pub gate: GateConfig,

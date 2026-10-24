@@ -131,8 +131,8 @@ pub enum Action {
     ModuleRemove,
     /// `LinksService::issue` (`link.issue`).
     LinkIssue,
-    /// `TunnelsService::open` (`tunnel.open`).
-    TunnelOpen,
+    /// `TunnelsService::expose` (`tunnel.expose`).
+    TunnelExpose,
     /// `ArtifactsService::publish` (`artifact.publish`).
     ArtifactPublish,
     /// `ArtifactsService::update` (`artifact.update`).
@@ -209,7 +209,7 @@ impl Action {
         Self::ModuleUpdate,
         Self::ModuleRemove,
         Self::LinkIssue,
-        Self::TunnelOpen,
+        Self::TunnelExpose,
         Self::ArtifactPublish,
         Self::ArtifactUpdate,
         Self::ArtifactShare,
@@ -296,7 +296,7 @@ impl Action {
             Self::ModuleUpdate => "module.update",
             Self::ModuleRemove => "module.remove",
             Self::LinkIssue => "link.issue",
-            Self::TunnelOpen => "tunnel.open",
+            Self::TunnelExpose => "tunnel.expose",
             Self::ArtifactPublish => "artifact.publish",
             Self::ArtifactUpdate => "artifact.update",
             Self::ArtifactShare => "artifact.share",

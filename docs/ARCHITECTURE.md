@@ -38,7 +38,7 @@ liftoffd ──► mcp (: /mcp, liftoffd::mcp_http)
 store ──► module-sql ──► core
 rest ──► api
 liftoff (CLI) ──► core, wasm, module-sql, mcp, api (: локальный режим)
-liftoff (CLI) ──► tunnel (: lof dev)
+liftoff (CLI) ──► tunnel (: lof expose)
 mcp ──► api
 tunnel ──► (ни одного крейта workspace)
 ```
@@ -53,7 +53,7 @@ tunnel ──► (ни одного крейта workspace)
 | `crates/host` (`liftoff-host`) | Docker Compose, systemd, файлы проекта, `DnsResolver` |
 | `crates/proxy` (`liftoff-proxy`) | Caddy admin API |
 | `crates/wasm` (`liftoff-wasm`) | хост модулей на wasmtime: загрузка компонентов, импорты `host`, `wasi:http` с allow-list, лимиты, планировщик, кэш компиляции, `ModuleSet` для диспетчера хуков, `HttpModuleSource` (реестр), `HostRuntime` (порт `ModuleRuntime` над хостом и каталогом компонентов: демона и CLI), хост без планировщика (`without_scheduler`, CLI), контракт хоста (`testing`, фича `test-support`); рантайм функций (`functions`: мир `wasi:http/proxy` с `wasi:config` и `wasi:keyvalue`, пул инстансов на environment, лимиты, прекомпиляция, прогрев) |
-| `crates/tunnel` (`liftoff-tunnel`) | туннель `lof dev`: кадры управления (`Hello`, `Shutdown`, `Evicted`) текстом WebSocket, `yamux` в бинарных сообщениях, сервер открывает потоки; `TunnelServer` (сторона демона: `serve` над сырым IO после `101`, `forward` запроса с `503` без туннеля и сверх `max_streams`, склейка апгрейдов) и `TunnelClient` (сторона CLI: подключение с сессией и `X-Liftoff-Project`, `502` при закрытом локальном порте, keepalive, backoff до 60 секунд, `Shutdown`, окончательный `Refused` при `401`/`403`); лимит полосы на environment (`Bandwidth`), лимиты сообщения WebSocket и окна `yamux`; `serve_as` держит туннель под ключом (демон: id environment, имена уникальны только в проекте), а в `Hello` называет имя; не зависит ни от одного крейта workspace |
+| `crates/tunnel` (`liftoff-tunnel`) | туннель `lof expose`: кадры управления (`Hello`, `Shutdown`, `Evicted`) текстом WebSocket, `yamux` в бинарных сообщениях, сервер открывает потоки; `TunnelServer` (сторона демона: `serve` над сырым IO после `101`, `forward` запроса с `503` без туннеля и сверх `max_streams`, склейка апгрейдов) и `TunnelClient` (сторона CLI: подключение с сессией, портом в `X-Liftoff-Expose` и `X-Liftoff-Share`, `502` при закрытом локальном порте на `127.0.0.1` и `[::1]`, keepalive, backoff до 60 секунд, `Shutdown`, окончательный `Refused` при `4xx`, кроме `408` и `429`); лимит полосы на environment (`Bandwidth`), лимиты сообщения WebSocket и окна `yamux`; `serve_as` держит туннель под ключом (демон: id environment, имена уникальны только в проекте), а в `Hello` называет имя; не зависит ни от одного крейта workspace |
 | `crates/mcp` (`liftoff-mcp`) | MCP-сервер на стороне клиента API: инструменты из `OPERATIONS` и из `GET /modules`, алиасы прежнего сервера артефактов (`aliases.rs`), вызовы в REST; транспорты stdio (`lof mcp`) и Streamable HTTP (`http.rs`, tower-сервис, который монтирует демон); зависит только от `api` |
 | `crates/liftoffd` | корень композиции: конфиг, `setup`, очередь, реконсиляция, сборка хоста модулей (`modules.rs`, `daemon.rs`); listener'ы на hyper (`listeners/functions.rs`: `[functions] bind`; `listeners/tunnel.rs`: `[tunnel] bind`, `Host` → tunnel-environment → `Access::check` до первого байта → `TunnelServer::forward` со своими `X-Forwarded-*`; общее у обоих в `listeners/common.rs`) и `tunnels.rs` (`DaemonTunnels`: соединение после `101` `GET /api/v1/tunnel` идёт в `TunnelServer` под ключом id environment, его начало и конец — в `TunnelsService`, потерянное через `tunnel.offline_after` проверяется `expire`); — `mcp_http.rs` (`/mcp` рядом с роутером `rest`), `sweep.rs` (sweeper артефактов), `import_artifacts.rs` (`liftoffd import-artifacts`) |
 | `crates/liftoff` | CLI `lof`: clap, динамические команды модулей (`dynamic.rs`), `lof module *`, `lof mcp`; локальный режим (`local/`): сервисы ядра над локальными адаптерами и свой хост модулей (раздел «Локальный режим CLI») |
@@ -92,7 +92,7 @@ liftoff-core` их не содержит. Для локального режим
 - без сервера (локальный режим;)
   CLI зависит от `liftoff-core` и `liftoff-wasm` и вызывает **те же**
   сервисы (`GitService`, `ModuleService`, `TemplateCatalog`,
-  `CreateService`, `StackDetector`, `core::dev`) над своими адаптерами
+  `CreateService`, `StackDetector`) над своими адаптерами
   (`crates/liftoff/src/local/`: хранилище секретов, хранилище модулей,
   хост модулей, `git`), а не пишет свою копию правил. Серверные адаптеры
   (`store`, `host`, `proxy`, `rest`) CLI не получит никогда (`cargo tree
@@ -221,7 +221,7 @@ Environment(id), Domain(id), Secret(scope), Artifact(id), Admin}`; `Admin` оз�
 | `module.update` | `ModuleUpdate` | `ModuleService::update` | `Admin` |
 | `module.remove` | `ModuleRemove` | `ModuleService::remove` | `Admin` |
 | `link.issue` | `LinkIssue` | `LinksService::issue` | `Environment` или `Artifact` (цели) |
-| `tunnel.open` | `TunnelOpen` | `TunnelsService::open` | `Project` |
+| `tunnel.expose` | `TunnelExpose` | `TunnelsService::expose` | `Admin` |
 | `artifact.publish` | `ArtifactPublish` | `ArtifactsService::publish` | `Admin` |
 | `artifact.update` | `ArtifactUpdate` | `ArtifactsService::update` | `Artifact` |
 | `artifact.share` | `ArtifactShare` | `ArtifactsService::share` | `Artifact` |
@@ -252,7 +252,7 @@ Environment(id), Domain(id), Secret(scope), Artifact(id), Admin}`; `Admin` оз�
 ссылки на него: чужой артефакт меняет, смотрит и открывает по ссылке
 только админ (ART-11). Внутренние шаги одной операции (например запись
 `LIFTOFF_TOKEN` внутри `deploy.rotate_token` или одноразовая ссылка,
-которую `tunnel.open` выдаёт владельцу своего `tunnel`, или ссылка
+которую `tunnel.expose` выдаёт владельцу своего `tunnel`, или ссылка
 входа, которую `artifact.publish` отдаёт автору) второй раз не
 спрашивают.
 
@@ -1362,10 +1362,13 @@ loopback (проверка конфига). Правила в ядре
   workspace в зависимостях): кадры управления (`Hello`, `Shutdown`,
   `Evicted`) — текстовые сообщения WebSocket в JSON, байты `yamux` —
   бинарные; сервер открывает поток на каждый HTTP-запрос и пишет его как
-  HTTP/1.1, клиент соединяет поток с `127.0.0.1:<PORT>`; keepalive,
+  HTTP/1.1, клиент соединяет поток с `127.0.0.1:<PORT>` (иначе
+  `[::1]:<PORT>`); keepalive,
   backoff, лимит полосы (`Bandwidth`), лимиты сообщения и окна;
 - демон — `GET /api/v1/tunnel` (`crates/rest/src/routes/tunnel.rs`:
-  `cli`-сессия, `X-Liftoff-Project`, `TunnelsService::open`, upgrade с
+  `cli`-сессия, порт в `X-Liftoff-Expose`, `X-Liftoff-Share`, адрес
+  клиента — пир или последний адрес `X-Forwarded-For` локального Caddy,
+  `TunnelsService::expose`, upgrade с `X-Liftoff-Address` и
   `X-Liftoff-Login-Url` для `private`) отдаёт сырое соединение после
   `101` в `DaemonTunnels` (`crates/liftoffd/src/tunnels.rs`), тот — в
   `TunnelServer` под ключом id environment и сообщает ядру
@@ -1375,15 +1378,18 @@ loopback (проверка конфига). Правила в ядре
   (`crates/liftoffd/src/listeners/tunnel.rs`, `[tunnel] bind`, только
   loopback) находит environment по `Host`, спрашивает `Access::check` до
   первого байта, обслуживает `/.liftoff/callback|logout` и отдаёт запрос
-  `TunnelServer::forward` со своими `X-Forwarded-*`;
-- CLI — `crates/liftoff/src/commands/dev/tunnel.rs`: `TunnelClient`
-  после запуска `[dev] command`, печать dev-адреса и ссылки входа по
-  одному разу, `--share`, `Shutdown` на `Ctrl-C`.
+  `TunnelServer::forward` со своими `X-Forwarded-*` и `Host: localhost`;
+- CLI — `crates/liftoff/src/commands/expose.rs`: `TunnelClient` порта,
+  печать адреса и ссылки входа по одному разу, `--share`, `Shutdown` на
+  `Ctrl-C`; отказ и вытеснение завершают запуск.
 
-Правила (имя `<project>-dev` или `<project>-<login>`, владелец,
-`private`, managed-домен с хуком `domain_created`, `running`/`offline`,
-`tunnel.offline_after`) — в `liftoff_core::service::TunnelsService`; на
-fake clock ядра. Руководство — `docs/DEV.md`.
+Правила (имя — порт на машине демона, иначе `<login>-<id>`
+(`liftoff_core::expose`), зона `localhost.<base>`, собственный проект
+установки `localhost`, которого не видно в списках, владелец,
+`private` без `--share`, managed-домен с хуком `domain_created`,
+`running`/`offline`, `tunnel.offline_after`) — в
+`liftoff_core::service::TunnelsService`; на fake clock ядра.
+Руководство — `docs/EXPOSE.md`.
 
 ### Вход браузера и одноразовые ссылки (OTL-01…09, VIS)
 
@@ -1553,32 +1559,24 @@ listener'ов: хост — адрес цели, `shared` пускает все�
   stderr проходит насквозь. Токен подключения форжа попадает в дочерний
   процесс только через окружение (`GIT_CONFIG_*`: заголовок
   `Authorization` только для `https://<host>/`), не через аргументы.
-- `lof dev` (`crates/liftoff/src/commands/dev.rs`)
-  запускает `[dev] command` из `liftoff.toml` (иначе то, что предложила
-  детекция стека по `package.json`) как `sh -c <строка>` в корне рабочего
+- `lof deploy` в function-проекте (`crates/liftoff/src/commands/functions.rs`) запускает `[function]
+  build` из `liftoff.toml` как `sh -c <строка>` в корне рабочего
   дерева. Это единственный shell у CLI: строку пишет сам человек в своём
   манифесте, она никогда не приходит с сервера, и пишется она как
-  команда оболочки (`cd web && bun dev`); `--port N` для фреймворков,
-  которые игнорируют `PORT`, дописывается в конец строки
-  (`liftoff_core::dev::with_port`). `PORT` и секреты передаются только
-  через окружение, не через аргументы. stdin закрыт, stdout и stderr
-  проходят насквозь. Дочерний процесс — лидер своей группы процессов:
-  `Ctrl-C` шлёт группе `SIGTERM`, через 5 секунд `SIGKILL` тому, что
-  осталось (`rustix::process::kill_process_group`, без `unsafe`).
-- `lof deploy` в function-проекте (`crates/liftoff/src/commands/functions.rs`) запускает `[function]
-  build` из `liftoff.toml` так же, как `[dev] command`: `sh -c <строка>`
-  в корне рабочего дерева, строка — из манифеста самого человека, никогда
-  с сервера. Это второй и последний shell у CLI. stdin закрыт, stdout и
+  команда оболочки (`cd web && bun run build`). stdin закрыт, stdout и
   stderr сборки идут в stderr CLI (stdout принадлежит CLI), секретов
   сборка не получает. Упавшая сборка — exit 1 без загрузки (FDEP-07).
-  Сборка, как и `[dev] command`, — лидер своей группы процессов:
-  `Ctrl-C`, `SIGTERM` и `SIGHUP` CLI завершают всю группу (`SIGTERM`,
-  через 5 секунд `SIGKILL`), и выход `sh` тоже: оставленный сборкой в
+  Сборка — лидер своей группы процессов
+  (`crates/liftoff/src/commands/group.rs`): `Ctrl-C`, `SIGTERM` и
+  `SIGHUP` CLI завершают всю группу (`SIGTERM`, через 5 секунд
+  `SIGKILL`, `rustix::process::kill_process_group`, без `unsafe`), и
+  выход `sh` тоже: оставленный сборкой в
   фоне процесс не держит её вывод, и `lof deploy` не зависает.
   Шаблоны функций (`templates/fn-*`) нового пути к процессам не
-  добавляют: их `[function] build` и `[dev] command` (`cargo build`,
-  `bun run build`, `componentize-py`, `wasmtime serve`) — те же две
-  строки манифеста человека.
+  добавляют: их `[function] build` (`cargo build`, `bun run build`,
+  `componentize-py`) — та же строка манифеста человека. `[dev] command`
+  манифест ещё принимает, но CLI его не запускает: человек запускает
+  приложение сам, а `lof expose` открывает его порт.
 - `liftoffd setup` — одноразовый установщик, код корня композиции: он
   запускает команды хоста (`useradd`, `chown`, `systemctl`, `docker
   compose`, `visudo`) через свой трейт `Runner`
@@ -1662,11 +1660,10 @@ listener'ов: хост — адрес цели, `shared` пускает все�
   отказывает, как `push`.
 - `lof templates` без сервера это `TemplateCatalog` над локальными
   подключениями и `[local] templates` конфига CLI, в том же типе провода,
-  что `GET /git/templates`. `lof dev` без сервера берёт секреты из
-  локального хранилища (`env_scopes`, `merge_layers`) и добавляет
-  `LIFTOFF_PROJECT`, `LIFTOFF_ENV` и пустой `LIFTOFF_DOMAIN`, как сервер;
-  туннеля нет. Детекция стека (`StackDetector`) и выбор `--port`
-  (`core::dev`) читают рабочее дерево через трейт `SourceTree`: CLI даёт
+  что `GET /git/templates`. `lof secret pull [--write]` без сервера
+  берёт секреты из локального хранилища (`env_scopes`, `merge_layers`);
+  `lof expose` без сервера отказывает (78). Детекция стека
+  (`StackDetector`) читает рабочее дерево через трейт `SourceTree`: CLI даёт
   им `DirTree` (чтение каталога через `std::fs`, оно живёт в ядре рядом с
   трейтом), тесты ядра — фикстуры `tests/fixtures/detect/`; в сеть
   детекция не ходит.

@@ -2,7 +2,7 @@
 
 Cargo workspace: domain, services and ports in `crates/core`; API wire types
 in `crates/api`; driven adapters in `crates/{store,host,proxy,wasm}` (`wasm`
-is the module host and the function runtime); the tunnel of `lof dev`
+is the module host and the function runtime); the tunnel of `lof expose`
 (protocol, multiplexer, both sides; no workspace dependency) in
 `crates/tunnel`; the HTTP adapter in `crates/rest` (with the artifact
 viewer and the panel's CORS); the MCP server in `crates/mcp` (stdio for
@@ -17,7 +17,7 @@ stays a plain description of the features). Layout and checks:
 `CONTRIBUTING.md`.
 Adding an interface: `docs/ADDING_AN_INTERFACE.md`. Writing a module:
 `docs/MODULES.md`. Making a template: `docs/TEMPLATES.md`. Functions:
-`docs/FUNCTIONS.md`. `lof dev` and the tunnel: `docs/DEV.md`. Artifacts:
+`docs/FUNCTIONS.md`. `lof expose` and the tunnel: `docs/EXPOSE.md`. Artifacts:
 `docs/ARTIFACTS.md`. MCP (both transports, OAuth): `docs/MCP.md`.
 
 ## Done means
@@ -53,7 +53,7 @@ before the tests, a dry run of the module releases and
   (`liftoffd::mcp_http` mounts `liftoff-mcp`'s Streamable HTTP
   transport beside the REST router); `rest → api`;
   `liftoff → core, wasm, module-sql, mcp → api`; `liftoffd` (the
-  daemon's side) and `liftoff` (`lof dev`'s client) use
+  daemon's side) and `liftoff` (`lof expose`'s client) use
   `liftoff-tunnel`, which depends on no workspace crate (not even
   `core`). The function runtime lives in `crates/wasm` behind the core's
   `FunctionHost`, the component files behind `ComponentFiles` in
@@ -106,18 +106,17 @@ before the tests, a dry run of the module releases and
   `Runner`, `lof server upgrade`'s `HostCommand` (which `lof artifact
   open --browser` also takes to run `xdg-open <link>`, `open` on macOS;
   its failure is a warning), local mode's `git`
-  children (`crates/liftoff/src/local/git.rs`), the `[dev] command` of
-  `lof dev` (`crates/liftoff/src/commands/dev.rs`) and the `[function]
+  children (`crates/liftoff/src/local/git.rs`) and the `[function]
   build` of `lof deploy` (`crates/liftoff/src/commands/functions.rs`;
   `docs/ARCHITECTURE.md`, «Исключения»): an argument vector, never a
   shell; `-c protocol.ext.allow=never`, `GIT_TERMINAL_PROMPT=0`, `--`
   before operands, stderr passed through; secrets through the
-  environment only. The only shells are `sh -c` over the `[dev] command`
-  and the `[function] build` strings, which come from the person's own
-  `liftoff.toml` (or `package.json`), never from a server; the dev
-  command and the build each lead their own process group, which Ctrl-C
-  (and the build's own exit) ends; the build's stdout and stderr both go
-  to the CLI's stderr.
+  environment only. The only shell is `sh -c` over the `[function]
+  build` string, which comes from the person's own `liftoff.toml`, never
+  from a server; the build leads its own process group
+  (`crates/liftoff/src/commands/group.rs`), which Ctrl-C (and the
+  build's own exit) ends; its stdout and stderr both go to the CLI's
+  stderr.
 - Releases: a `v*.*.*` tag runs the release workflows, which ship
   `liftoffd`, `liftoff`, an archive with the `lof` symlink, `install.sh`
   and `SHA256SUMS-<target>.txt` signed with the `LIFTOFF_SIGNING_KEY`

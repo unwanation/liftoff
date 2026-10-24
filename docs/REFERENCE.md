@@ -105,17 +105,17 @@ In a repository that already exists, `lof create` without `--template`
 reads its `liftoff.toml`, or proposes one from the files (stack
 detection: `package.json` and its lockfile, `Cargo.toml`,
 `pyproject.toml`, `go.mod`, a compose file, `wit/`), confirms it and
-commits it with the same plan. `lof dev` runs the project on the machine:
-`[dev] command` with `PORT` (a free port of 4000–4999) and the
-environment's secrets in its environment, `http://localhost:<PORT>`
-printed; Vite, Astro, SvelteKit and Expo get `--port N`.
+commits it with the same plan. To run it on the machine, `lof secret
+pull --write` writes the environment's secrets into `.env.<env>`
+(`0600`), and `lof expose <PORT>` puts the running app on the network
+(below).
 
 Making a template (the manifest, substitutions, secrets, the CI workflow):
 [docs/TEMPLATES.md](TEMPLATES.md). The templates liftoff ships are in
 `templates/`: the functions `fn-ts`, `fn-rust` and `fn-python` (below),
 published as `github.com/unwanation/liftoff-fn-<lang>`.
 
-## Functions and dev addresses
+## Functions and `lof expose`
 
 A function is an HTTP handler compiled to a WebAssembly component of
 `wasi:http/proxy@0.2` (plus `wasi:config` for its secrets and
@@ -138,21 +138,27 @@ the CI workflow `lof create` committed does the same on every push. A
 function is open to everyone until `lof env unshare`. Languages, limits
 and cold starts: [docs/FUNCTIONS.md](FUNCTIONS.md).
 
-`lof dev` runs the project on the machine and, with a server, gives it a
-dev address `https://<project>-dev.<base>` (`<project>-<login>` with the
-`tenants` module) through a tunnel to the local port:
+`lof expose <PORT>` puts a port of the machine on the network through
+the server, through a tunnel to the local port; no project is needed.
+On the server's own machine the address is
+`https://<port>.localhost.<base>`, anywhere else
+`https://<login>-<id>.localhost.<base>` (stable for a user and port).
+The app's own WebSocket (Vite's or webpack's hot reload) crosses the
+tunnel, so a change shows in the browser without a reload:
 
 ```sh
-lof dev                   # prints http://localhost:<PORT>, the dev address and a one-time login link
-lof dev --share           # the dev address without a login
-lof env share --env hello-dev   # the same outside dev; `unshare` puts the login back
+npm run dev               # the app on localhost:3000, as always
+lof expose 3000           # prints the address and a one-time login link
+lof expose 3000 --share   # the address without a login
 ```
 
-The dev address is private: its owner and the admin get in, a browser
-by the printed link (one use, 10 minutes, a 24-hour session). A dropped
-connection reconnects; 30 seconds without it the address answers `503`
-«dev offline», and Ctrl-C takes it down at once. Details:
-[docs/DEV.md](DEV.md).
+The address is private: its owner and the admin get in, through the
+single sign-on of the `oidc` module or else by the printed link (one
+use, 10 minutes, a 24-hour session). A dropped connection reconnects;
+30 seconds without it the address answers `503` «dev offline», and
+Ctrl-C takes it down at once. Without the `dns.*` module the server
+needs the DNS record `*.localhost.<base>`. Details:
+[docs/EXPOSE.md](EXPOSE.md).
 
 ## Artifacts
 
@@ -215,7 +221,7 @@ adapters in `~/.config/liftoff/` (`0700`; `LIFTOFF_CONFIG` or
 lof git connect github --token <PAT>          # installs the git.github module locally
 lof templates                                 # the catalogue of [local] templates
 lof create blog --template github.com/unwanation/liftoff-fn-ts   # generate, clone, {{project}}, secrets, commit, push
-cd blog && lof dev                            # run it, secrets from the local store
+cd blog && lof secret pull --write            # its secrets from the local store into .env.prod
 lof secret set API_KEY=… --scope project      # set|get|ls|rm|pull|history|rollback
 lof login https://liftoff.example.com --token <t> && lof git connect github --token <PAT>
 lof server connect https://liftoff.example.com   # the project and its secrets move to the server

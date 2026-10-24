@@ -37,7 +37,7 @@ just serve                            # liftoffd with pretty logs
 | `crates/proxy`     | `liftoff-proxy`  | `Proxy` through the Caddy admin API.                                 |
 | `crates/wasm`      | `liftoff-wasm`   | wasmtime host of the modules; `ModuleSource` over the module registry; the host contract (`test-support`); the function runtime (`functions`). |
 | `crates/mcp`       | `liftoff-mcp`    | MCP server: the API's operations, the modules' tools and the artifact aliases as MCP tools; stdio behind `lof mcp`, Streamable HTTP as a tower service the daemon mounts at `/mcp`. |
-| `crates/tunnel`    | `liftoff-tunnel` | The tunnel of `lof dev`: control frames and `yamux` over a WebSocket, the daemon's server and the CLI's client. |
+| `crates/tunnel`    | `liftoff-tunnel` | The tunnel of `lof expose`: control frames and `yamux` over a WebSocket, the daemon's server and the CLI's client. |
 | `wit/`             |                  | The module world `liftoff:module@0.1.0`, the function world `liftoff:function@0.1.0` (`wit/function/`) and the WASI WIT they import. |
 | `modules/`         |                  | The modules (`oidc`, `tenants`, `dns.cloudflare`, `git.forgejo`, `git.github`, `git.gitlab`, `mcp`, `web`) and the host's contract components (`testing/`, the contract functions in `testing/functions/`), a workspace of its own for `wasm32-wasip2`; `registry/` signs releases. |
 | `templates/`       |                  | The sources of the templates liftoff ships (`fn-ts`, `fn-rust`, `fn-python`), published as repositories of their own. |
@@ -91,7 +91,7 @@ that stops firing is itself an error, so suppressions cannot rot.
 - [docs/MODULES.md](docs/MODULES.md) — how to write, test and release a module.
 - [docs/TEMPLATES.md](docs/TEMPLATES.md) — how to make a template for `lof create`.
 - [docs/FUNCTIONS.md](docs/FUNCTIONS.md) — functions: the world, languages, build, deploy, limits.
-- [docs/DEV.md](docs/DEV.md) — `lof dev`, the dev address, private and share, the tunnel.
+- [docs/EXPOSE.md](docs/EXPOSE.md) — `lof expose`, the address, private and share, the tunnel.
 - [docs/ARTIFACTS.md](docs/ARTIFACTS.md) — artifacts: versions, share and TTL, the sandbox, the viewer, CLI, MCP, the import.
 - [docs/MCP.md](docs/MCP.md) — MCP over stdio and HTTP, OAuth, the tools and the aliases.
 - [docs/ADDING_AN_INTERFACE.md](docs/ADDING_AN_INTERFACE.md) — step-by-step recipe.

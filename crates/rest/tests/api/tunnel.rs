@@ -1,4 +1,4 @@
-//! `GET /api/v1/tunnel`, the WebSocket upgrade of `lof dev`: `DEVT-01`, `DEVT-06`, `DEVT-07` over
+//! `GET /api/v1/tunnel`, the WebSocket upgrade of `lof expose`: `DEVT-01`, `DEVT-06`, `DEVT-07`, `EXP-01`, `EXP-02`, `EXP-07` over
 //! the whole API served on an ephemeral `127.0.0.1` port (an upgrade
 //! needs a real connection), asked with a hand-written HTTP/1.1 upgrade
 //! request, and a hand-written fake of the daemon's tunnel server that
@@ -13,7 +13,6 @@ use std::sync::{Arc, Mutex, PoisonError};
 use http::StatusCode;
 use liftoff_core::domain::{Environment, Visibility};
 use liftoff_core::fakes::World;
-use liftoff_core::ports::Store as _;
 use liftoff_rest::{AppState, RestConfig, Services, TunnelHandoff, UpgradedIo, serve_app_on};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::{TcpListener, TcpStream};
@@ -121,9 +120,10 @@ impl Served {
         }
     }
 
-    /// The upgrade request of `lof dev` with `bearer` and, when given,
-    /// `project` in `X-Liftoff-Project`; the head of the answer.
-    async fn upgrade(&self, bearer: Option<&str>, project: Option<&str>) -> Head {
+    /// The upgrade request of `lof expose` with `bearer`, when given
+    /// `port` in `X-Liftoff-Expose`, and the header lines `extra`; the
+    /// head of the answer.
+    async fn upgrade(&self, bearer: Option<&str>, port: Option<&str>, extra: &str) -> Head {
         let mut request = format!(
             "GET /api/v1/tunnel HTTP/1.1\r\n\
              Host: liftoff.test\r\n\
@@ -135,19 +135,27 @@ impl Served {
         if let Some(bearer) = bearer {
             write!(request, "Authorization: Bearer {bearer}\r\n").unwrap();
         }
-        if let Some(project) = project {
-            write!(request, "X-Liftoff-Project: {project}\r\n").unwrap();
+        if let Some(port) = port {
+            write!(request, "X-Liftoff-Expose: {port}\r\n").unwrap();
         }
+        request.push_str(extra);
         request.push_str("\r\n");
         tokio::time::timeout(EXCHANGE, head_of(self.addr, request))
             .await
             .expect("the API answers the upgrade in time")
     }
 
-    /// The upgrade of `owner`'s fresh `cli` session for `shop`.
-    async fn owner_upgrade(&self) -> Head {
+    /// The upgrade of `owner`'s fresh `cli` session for port 3000 with
+    /// the header lines `extra`.
+    async fn owner_upgrade_with(&self, extra: &str) -> Head {
         let secret = self.world.login(&self.world.owner).await.unwrap();
-        self.upgrade(Some(secret.expose()), Some("shop")).await
+        self.upgrade(Some(secret.expose()), Some("3000"), extra)
+            .await
+    }
+
+    /// The upgrade of `owner`'s fresh `cli` session for port 3000.
+    async fn owner_upgrade(&self) -> Head {
+        self.owner_upgrade_with("").await
     }
 }
 
@@ -208,7 +216,7 @@ mod upgrade {
     #[tokio::test]
     async fn unauthorized_when_no_session() {
         let served = Served::start().await;
-        let head = served.upgrade(None, Some("shop")).await;
+        let head = served.upgrade(None, Some("3000"), "").await;
         assert_eq!(head.status, StatusCode::UNAUTHORIZED);
     }
 
@@ -216,7 +224,9 @@ mod upgrade {
     #[tokio::test]
     async fn unauthorized_when_session_unknown() {
         let served = Served::start().await;
-        let head = served.upgrade(Some(UNKNOWN_SESSION), Some("shop")).await;
+        let head = served
+            .upgrade(Some(UNKNOWN_SESSION), Some("3000"), "")
+            .await;
         assert_eq!(head.status, StatusCode::UNAUTHORIZED);
     }
 
@@ -225,7 +235,7 @@ mod upgrade {
     async fn forbidden_when_bearer_is_deploy_token() {
         let served = Served::start().await;
         let token = served.world.deploy_token(&served.world.shop).await.unwrap();
-        let head = served.upgrade(Some(token.expose()), Some("shop")).await;
+        let head = served.upgrade(Some(token.expose()), Some("3000"), "").await;
         assert_eq!(head.status, StatusCode::FORBIDDEN);
     }
 
@@ -238,7 +248,9 @@ mod upgrade {
             .browser_login(&served.world.owner)
             .await
             .unwrap();
-        let head = served.upgrade(Some(browser.expose()), Some("shop")).await;
+        let head = served
+            .upgrade(Some(browser.expose()), Some("3000"), "")
+            .await;
         assert_eq!(head.status, StatusCode::FORBIDDEN);
     }
 
@@ -247,26 +259,39 @@ mod upgrade {
     async fn hands_nothing_over_when_refused() {
         let served = Served::start().await;
         let token = served.world.deploy_token(&served.world.shop).await.unwrap();
-        let with_token = served.upgrade(Some(token.expose()), Some("shop")).await;
-        let without = served.upgrade(None, Some("shop")).await;
+        let with_token = served.upgrade(Some(token.expose()), Some("3000"), "").await;
+        let without = served.upgrade(None, Some("3000"), "").await;
         assert_eq!(
             (with_token.status, without.status, served.handoff.handed()),
             (StatusCode::FORBIDDEN, StatusCode::UNAUTHORIZED, vec![])
         );
     }
 
-    // TC: DEVT-01 (the project is read at the boundary)
+    // TC: DEVT-01 (the port is read at the boundary)
     #[tokio::test]
-    async fn bad_request_when_project_header_missing() {
+    async fn bad_request_when_port_header_missing() {
         let served = Served::start().await;
         let secret = served.world.login(&served.world.owner).await.unwrap();
-        let head = served.upgrade(Some(secret.expose()), None).await;
+        let head = served.upgrade(Some(secret.expose()), None, "").await;
+        assert_eq!(head.status, StatusCode::BAD_REQUEST);
+    }
+
+    // TC: DEVT-01 (a port is 1–65535)
+    #[rstest::rstest]
+    #[case::zero("0")]
+    #[case::too_big("65536")]
+    #[case::no_number("web")]
+    #[tokio::test]
+    async fn bad_request_when_port_is_no_port(#[case] port: &str) {
+        let served = Served::start().await;
+        let secret = served.world.login(&served.world.owner).await.unwrap();
+        let head = served.upgrade(Some(secret.expose()), Some(port), "").await;
         assert_eq!(head.status, StatusCode::BAD_REQUEST);
     }
 
     // TC: DEVT-01
     #[tokio::test]
-    async fn switches_to_websocket_when_cli_session_names_project() {
+    async fn switches_to_websocket_when_cli_session_names_port() {
         let served = Served::start().await;
         let head = served.owner_upgrade().await;
         assert_eq!(
@@ -292,9 +317,9 @@ mod upgrade {
         );
     }
 
-    // TC: DEVT-01
+    // TC: DEVT-01, EXP-01 (a CLI on the machine itself names the port)
     #[tokio::test]
-    async fn hands_shop_dev_to_tunnel_server_when_upgraded() {
+    async fn hands_port_tunnel_to_tunnel_server_when_upgraded_on_server() {
         let served = Served::start().await;
         let _head = served.owner_upgrade().await;
         let handed = served.handoff.wait_handed().await;
@@ -303,7 +328,32 @@ mod upgrade {
                 .iter()
                 .map(|environment| environment.name.to_string())
                 .collect::<Vec<_>>(),
-            vec!["shop-dev".to_owned()]
+            vec!["3000".to_owned()]
+        );
+    }
+
+    // TC: EXP-01
+    #[tokio::test]
+    async fn address_header_of_port_when_upgraded_on_server() {
+        let served = Served::start().await;
+        let head = served.owner_upgrade().await;
+        assert_eq!(
+            head.header("x-liftoff-address"),
+            Some("https://3000.localhost.apps.test")
+        );
+    }
+
+    // TC: EXP-02 (forwarded by the local proxy from somewhere else)
+    #[tokio::test]
+    async fn address_header_of_login_when_forwarded_from_elsewhere() {
+        let served = Served::start().await;
+        let head = served
+            .owner_upgrade_with("X-Forwarded-For: 198.51.100.7\r\n")
+            .await;
+        let address = head.header("x-liftoff-address").unwrap_or_default();
+        assert!(
+            address.starts_with("https://owner-") && address.ends_with(".localhost.apps.test"),
+            "{address}"
         );
     }
 
@@ -321,27 +371,29 @@ mod upgrade {
         );
     }
 
-    // TC: DEVT-07 (a shared address needs no login)
+    // TC: DEVT-07, EXP-07 (`--share`: a shared address needs no login)
     #[tokio::test]
-    async fn no_login_url_header_when_tunnel_shared() {
+    async fn no_login_url_header_when_shared() {
         let served = Served::start().await;
-        let world = &served.world;
-        let tunnel = Environment {
-            visibility: Visibility::Shared,
-            ..world
-                .records
-                .tunnel(&world.shop, "shop-dev", &world.owner)
-                .unwrap()
-        };
-        world.ports.store.insert_environment(&tunnel).await.unwrap();
-        world
-            .add_address(&world.shop, &tunnel, "shop-dev.apps.test")
-            .await
-            .unwrap();
-        let head = served.owner_upgrade().await;
+        let head = served.owner_upgrade_with("X-Liftoff-Share: 1\r\n").await;
         assert_eq!(
             (head.status, head.header("x-liftoff-login-url")),
             (StatusCode::SWITCHING_PROTOCOLS, None)
+        );
+    }
+
+    // TC: EXP-07
+    #[tokio::test]
+    async fn hands_shared_tunnel_over_when_shared() {
+        let served = Served::start().await;
+        let _head = served.owner_upgrade_with("X-Liftoff-Share: 1\r\n").await;
+        let handed = served.handoff.wait_handed().await;
+        assert_eq!(
+            handed
+                .iter()
+                .map(|environment| environment.visibility)
+                .collect::<Vec<_>>(),
+            vec![Visibility::Shared]
         );
     }
 }

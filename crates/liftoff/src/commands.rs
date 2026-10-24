@@ -14,12 +14,13 @@ mod artifact;
 mod auth;
 mod create;
 mod deploys;
-mod dev;
 mod doctor;
 mod domains;
 mod envs;
+mod expose;
 mod functions;
 mod git;
+mod group;
 mod mcp;
 pub(crate) mod module;
 mod plan;
@@ -128,7 +129,7 @@ pub(crate) async fn dispatch<S: Sleeper>(
         Command::Git { command } => git::run(&mut ctx, command).await,
         Command::Create(create) => create::run(&mut ctx, create).await,
         Command::Templates { group } => templates::run(&mut ctx, group).await,
-        Command::Dev(dev) => dev::run(&mut ctx, dev).await,
+        Command::Expose(expose) => expose::run(&mut ctx, expose).await,
         Command::Tenant {
             command: TenantCommand::External(words),
         } => crate::dynamic::run(&mut ctx, tenant::below_tenant(words)).await,

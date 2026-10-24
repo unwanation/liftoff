@@ -36,9 +36,10 @@ fn by_membership(tenant: Option<&str>, user: &str, login: &str) -> Result<HookRe
 /// The actions anyone may ask about the installation as a whole: the
 /// lists the core then narrows item by item, the commands of modules,
 /// one's own forge connections and the template catalogue read through
-/// them, and one's own artifacts (publishing one, listing one's own; the
-/// core keeps `ls --all` to the admin).
-const OPEN_ACTIONS: [&str; 9] = [
+/// them, one's own artifacts (publishing one, listing one's own; the
+/// core keeps `ls --all` to the admin) and one's own tunnels of `lof
+/// expose` (the core lets only their owner and the admin through them).
+const OPEN_ACTIONS: [&str; 10] = [
     "project.list",
     "domain.list",
     "module.list",
@@ -48,6 +49,7 @@ const OPEN_ACTIONS: [&str; 9] = [
     "git.templates",
     "artifact.publish",
     "artifact.list",
+    "tunnel.expose",
 ];
 
 /// `authorize(actor, action, resource)`.

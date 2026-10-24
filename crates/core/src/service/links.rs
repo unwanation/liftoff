@@ -153,7 +153,7 @@ impl<P: Ports> LinksService<P> {
     }
 
     /// The link of [`LinksService::issue`] once `actor` may have it: an
-    /// operation that already asked about `target` (`tunnel.open` for the
+    /// operation that already asked about `target` (`tunnel.expose` for the
     /// owner's own tunnel) issues it without asking again.
     pub(super) async fn issue_checked(
         &self,
