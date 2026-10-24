@@ -33,7 +33,7 @@ jobs:
       - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           cache: true
       - run: cargo fmt --all -- --check
@@ -60,7 +60,7 @@ jobs:
       - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           cache: true
       - run: cargo hack check --workspace --feature-powerset --no-dev-deps
@@ -82,7 +82,7 @@ jobs:
       - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           cache: true
       # The host tests (crates/wasm, crates/liftoffd) load the components
@@ -117,7 +117,7 @@ jobs:
       - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           cache: true
       # The host tests (crates/wasm, crates/liftoffd) load the components of modules/.
@@ -164,7 +164,7 @@ jobs:
       # Before mise: its cargo tools would each install the toolchain of
       # rust-toolchain.toml at once and collide.
       - run: rustup toolchain install # from rust-toolchain.toml
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           cache: true
       - run: actionlint

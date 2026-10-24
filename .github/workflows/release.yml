@@ -37,7 +37,7 @@ jobs:
           TARGET: ${{ matrix.target }}
       # No tool cache on release builds: published artefacts must not depend
       # on cache contents (zizmor: cache-poisoning).
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           cache: false
       - uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2

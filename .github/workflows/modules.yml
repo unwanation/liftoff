@@ -33,7 +33,7 @@ jobs:
       - run: rustup toolchain install # from rust-toolchain.toml, with wasm32-wasip2
       # No tool cache on release builds: published artefacts must not depend
       # on cache contents (zizmor: cache-poisoning).
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           cache: false
       - name: tag
