@@ -104,7 +104,7 @@ minisign-verify = { version = "0.3", default-features = false }
 # Module configurations against their `config_schema` (REG-04): without
 # `resolve-http`/`resolve-file`, a schema's `$ref` reaches nothing outside
 # it, so the core stays free of HTTP and file I/O.
-jsonschema = { version = "0.59", default-features = false }
+jsonschema = { version = "0.60", default-features = false }
 # `liftoffd_min` against the daemon's version (REG-02).
 semver = { version = "1.0", default-features = false }
 
