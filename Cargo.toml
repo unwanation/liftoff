@@ -71,7 +71,7 @@ crypto_box = { version = "0.9", default-features = false }
 # WASM modules (crates/wasm). The WIT of `wasi:http` in `wit/deps/` is
 # copied from the `wasmtime-wasi-http` locked here (`just wit-deps`).
 wasmtime = { version = "49.0.4", default-features = false }
-wasmtime-wasi = { version = "49.0.4", default-features = false }
+wasmtime-wasi = { version = "50.0.0", default-features = false }
 wasmtime-wasi-http = { version = "49.0.4", default-features = false }
 # The export and import names of a function's component, read before it
 # compiles (FN-01): the version wasmtime 49.0.4 already locks.
