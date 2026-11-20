@@ -4,7 +4,7 @@
 
 # --- build stage -------------------------------------------------------------
 # Keep the tag in sync with rust-toolchain.toml. Digest-pinned; Dependabot bumps it.
-FROM rust:1.99.0-slim-trixie@sha256:2752b332db73fdbb7dc576f06c82ed1f312005784ef913d7e04a28f5f55dc581 AS builder
+FROM rust:1.100.0-slim-trixie@sha256:6f14b2b4b278ec0d50aa1d69541c304ce0f95e0f6268487aa9924af1c2e9aebe AS builder
 
 ARG TARGET=x86_64-unknown-linux-musl
 # Use the toolchain baked into the image; skip rust-toolchain.toml's extra components.
